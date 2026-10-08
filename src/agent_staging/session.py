@@ -40,7 +40,7 @@ class Hooks(Protocol):
 
     def before_request(self, request: int, tool: str) -> RequestFault | None: ...
 
-    def after_twin_call(self) -> None: ...
+    def after_twin_call(self, request: int) -> None: ...
 
 
 class Session:
@@ -77,9 +77,9 @@ class Session:
         try:
             result = self._branch.call(tool, **arguments)
         except TwinToolError as e:
-            self._hooks.after_twin_call()
+            self._hooks.after_twin_call(n)
             self._fail(record, AgentToolError(e.code, e.message), None, reached_twin=True)
-        self._hooks.after_twin_call()
+        self._hooks.after_twin_call(n)
         if fault is not None and fault.kind == "lost_response":
             record["result"] = result  # what the twin did; the agent never sees it
             self._fail(record, AgentToolError("timeout", TIMEOUT_MESSAGE), fault, reached_twin=True)

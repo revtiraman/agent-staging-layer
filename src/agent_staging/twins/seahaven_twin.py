@@ -114,6 +114,11 @@ class SeahavenBranch:
         row = self._inst.db.one(f'SELECT * FROM "{table}" WHERE {where}', *key.values())
         return None if row is None else dict(row)
 
+    def rows(self, table: str) -> list[dict[str, Any]]:
+        if not _IDENT.match(table):
+            raise KernelError(f"not a table name: {table}")
+        return [dict(r) for r in self._inst.db.rows(f'SELECT * FROM "{table}"')]
+
     def freeze(self, state_id: str, description: str) -> StateMeta:
         self._inst.freeze(state_id, description)
         return self._twin.state(state_id)

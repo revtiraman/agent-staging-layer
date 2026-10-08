@@ -113,6 +113,10 @@ class Branch(Protocol):
         """Read one row by primary key, for describing and stale checks. Not a tool."""
         ...
 
+    def rows(self, table: str) -> list[dict[str, Any]]:
+        """Read every row of a table, for invariants over state. Not a tool."""
+        ...
+
     def now(self) -> datetime:
         """What time the twin thinks it is."""
         ...

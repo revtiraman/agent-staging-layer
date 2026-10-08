@@ -154,9 +154,8 @@ def dry_run(ws: Workspace, twin: TwinKernel, agent: Agent, *, agent_name: str) -
     with twin.open(head) as branch:
         run = Run.start(branch, log)
         agent(run.session)
+        run.finish()  # logs every change, including any made outside a call
         plan = build_plan(twin, branch, base=base, run_id=run_id)
-        for change in branch.changes():
-            log.append("change", change.to_dict() | {"i": change.i})
     ws.write_json(ws.plan_path(plan.id), plan.to_file())
     log.append("plan.created", {"plan_id": plan.id, "hash": plan.hash, "summary": plan.body["summary"]})
     return plan, run_id

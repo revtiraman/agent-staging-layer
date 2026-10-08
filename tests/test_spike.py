@@ -199,7 +199,9 @@ def test_tampered_run_log_is_detected(ws: Workspace) -> None:
     _, run_id = dryrun.dry_run(ws, spike.twin(ws), spike.support_agent, agent_name="t")
     path = ws.run_log_path(run_id)
     lines = path.read_text().splitlines()
-    lines[2] = lines[2].replace("charge-0001", "charge-0009")
+    n = next(k for k, line in enumerate(lines) if '"type":"call"' in line)  # the agent's first request
+    assert "charge-0001" in lines[n]
+    lines[n] = lines[n].replace("charge-0001", "charge-0009")
     path.write_text("\n".join(lines) + "\n")
     assert any("does not match its hash" in p for p in RunLog(path).verify())
 

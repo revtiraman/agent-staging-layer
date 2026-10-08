@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,9 @@ class RunLogError(Exception):
 @dataclass
 class RunLog:
     path: Path
+    # Called with each appended record in its canonical JSON form, exactly as a reader of the
+    # file will see it (agent_staging.invariants reads records this way, live and on replay).
+    observers: list[Callable[[dict[str, Any]], None]] = field(default_factory=list, compare=False)
 
     @classmethod
     def create(cls, path: Path, header: dict[str, Any]) -> RunLog:
@@ -67,8 +71,11 @@ class RunLog:
             "prev": prev,
         }
         record = {**body, "hash": sha256(body)}
+        line = canonical(record)
         with self.path.open("a") as f:
-            f.write(canonical(record) + "\n")
+            f.write(line + "\n")
+        for observer in list(self.observers):
+            observer(json.loads(line))
         return record
 
     def verify(self) -> list[str]:

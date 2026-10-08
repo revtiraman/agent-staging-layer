@@ -18,8 +18,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import Any
 
 from agent_staging.faults import Delivery, Faults, RequestFault
+from agent_staging.invariants import Engine, Intent
 from agent_staging.kernel import Branch, Event, as_timedelta
 from agent_staging.runlog import RunLog
 from agent_staging.session import Session
@@ -34,18 +36,62 @@ class Run:
     branch: Branch
     log: RunLog
     faults: Faults = field(default_factory=Faults)
+    intent: Intent = field(default_factory=Intent)
+    engine: Engine | None = None
     session: Session = field(init=False)
+    failures: list[int] = field(default_factory=list, init=False)  # seqs of invariant.failed records
     _queue: list[Delivery] = field(default_factory=list, init=False)
     _events: dict[int, Event] = field(default_factory=dict, init=False)
     _batches: int = field(default=0, init=False)
+    _logged_changes: int = field(default=0, init=False)
+    _request_of_call: dict[int, int] = field(default_factory=dict, init=False)
+    _ended: bool = field(default=False, init=False)
 
     def __post_init__(self) -> None:
         self.session = Session(self.branch, self.log, self)
+        if self.engine is not None:
+            self.log.observers.append(self._check)
+            base = self.engine.base.meta
+            self.log.append("base.state", {"state": base.id, "file_sha256": base.file_sha256})
+            self.log.append("invariants.active", self.engine.active())
         self.log.append("faults.profile", self.faults.profile())
+        self.log.append("intent", self.intent.record())
 
     @classmethod
-    def start(cls, branch: Branch, log: RunLog, faults: Faults | None = None) -> Run:
-        return cls(branch, log, faults or Faults())
+    def start(
+        cls,
+        branch: Branch,
+        log: RunLog,
+        faults: Faults | None = None,
+        *,
+        intent: Intent | None = None,
+        engine: Engine | None = None,
+    ) -> Run:
+        return cls(branch, log, faults or Faults(), intent or Intent(), engine)
+
+    def finish(self) -> dict[str, Any]:
+        """End the run: log any changes made outside a request, check once more, record the outcome."""
+        if self._ended:
+            raise HarnessError("run already finished")
+        self._log_changes()
+        self.log.append("steps.end", {"at": self.branch.now().isoformat()})
+        outcome = {"outcome": "failed" if self.failures else "passed", "violations": list(self.failures)}
+        self.log.append("run.end", outcome)
+        self._ended = True
+        if self.engine is not None:
+            self.log.observers.remove(self._check)
+        return outcome
+
+    def _check(self, record: dict[str, Any]) -> None:
+        assert self.engine is not None
+        for failure in self.engine.feed(record):
+            self.failures.append(self.log.append("invariant.failed", failure)["seq"])
+
+    def _log_changes(self) -> None:
+        changes = self.branch.changes()
+        for c in changes[self._logged_changes :]:
+            self.log.append("change", {"request": self._request_of_call.get(c.i), "i": c.i, **c.to_dict()})
+        self._logged_changes = len(changes)
 
     # --- Session hooks ---
 
@@ -55,7 +101,9 @@ class Run:
             self.log.append("fault", record)
         return fault
 
-    def after_twin_call(self) -> None:
+    def after_twin_call(self, request: int) -> None:
+        self._request_of_call[len(self.branch.calls()) - 1] = request
+        self._log_changes()
         self._collect()
 
     # --- time ---
