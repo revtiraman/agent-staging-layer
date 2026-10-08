@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
-from agent_staging.faults import Delivery, Faults, RequestFault
+from agent_staging.faults import Delivery, Faults, FaultSource, RequestFault
 from agent_staging.invariants import Engine, Intent
 from agent_staging.kernel import Branch, Event, as_timedelta
 from agent_staging.runlog import RunLog
@@ -35,7 +35,7 @@ class HarnessError(Exception):
 class Run:
     branch: Branch
     log: RunLog
-    faults: Faults = field(default_factory=Faults)
+    faults: FaultSource = field(default_factory=Faults)
     intent: Intent = field(default_factory=Intent)
     engine: Engine | None = None
     session: Session = field(init=False)
@@ -49,10 +49,14 @@ class Run:
 
     def __post_init__(self) -> None:
         self.session = Session(self.branch, self.log, self)
+        o = self.branch.origin
         if self.engine is not None:
             self.log.observers.append(self._check)
-            base = self.engine.base.meta
-            self.log.append("base.state", {"state": base.id, "file_sha256": base.file_sha256})
+            if (self.engine.base.meta.id, self.engine.base.meta.file_sha256) != (o.state, o.file_sha256):
+                raise HarnessError("the engine's base state is not the state this branch was opened from")
+        origin = {"twin": o.twin, "state": o.state, "file_sha256": o.file_sha256, "seed": o.seed}
+        self.log.append("base.state", origin | {"start": o.start.isoformat()})
+        if self.engine is not None:
             self.log.append("invariants.active", self.engine.active())
         self.log.append("faults.profile", self.faults.profile())
         self.log.append("intent", self.intent.record())
@@ -62,7 +66,7 @@ class Run:
         cls,
         branch: Branch,
         log: RunLog,
-        faults: Faults | None = None,
+        faults: FaultSource | None = None,
         *,
         intent: Intent | None = None,
         engine: Engine | None = None,

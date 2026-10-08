@@ -67,7 +67,7 @@ round.
 `staging replay <run>` verifies the log's hash chain, rebuilds the four inputs from the log and
 the hash-pinned base state, re-evaluates every invariant that was active in the run, and compares
 the result with the recorded `invariant.failed` records. It does not re-run the agent or re-draw
-a single fault. Re-executing a run from its recorded decisions is milestone 5.
+a single fault. Re-executing a run from its recorded decisions is the next section.
 
 Outcomes, written to a replay record (`runs/<run>/replays/`):
 
@@ -81,6 +81,53 @@ Outcomes, written to a replay record (`runs/<run>/replays/`):
   exits non-zero.
 - An invariant that was active in the run but no longer exists is reported, with a non-zero exit.
   Invariants that exist now but weren't active in the run are listed, not evaluated.
+
+## Re-execution replay (milestone 5)
+
+**Choice: re-execute the harness and re-feed the recorded agent decisions. The environment is
+deterministic from the log; the model is not, so replay re-executes the harness and re-feeds
+recorded decisions.** Running a live agent again would test the model's sampling, not the run,
+and its result can't be guaranteed to match. If that is ever built, it will be an explicit flag
+(`staging replay --live-agent`), documented as not guaranteed to match, and never the default.
+
+`staging replay --execute <run>`:
+
+1. Verifies the log's hash chain, then opens a fresh branch of the hash-pinned base state at the
+   recorded start time, with the recorded twin seed.
+2. Answers every fault decision from the log's `fault` records, looked up by key. Nothing is
+   re-drawn from the seed. If the harness needs a decision the log doesn't have, that is a
+   divergence.
+3. Re-issues the agent's recorded requests (tool and arguments) in log order, in the same place:
+   at top level, or inside the webhook delivery whose handler made them. The recorded clock
+   advances are replayed between them.
+4. Writes a new run log (`runs/<run>/replays/execute-NNN/log.jsonl`), checks the hard invariants
+   live with the same engine, and compares the new log with the original record by record. Wall
+   clock times and hashes are excluded, because they can't match. Everything else must: call
+   results and errors, row changes, fault decisions, deliveries and their times, and invariant
+   failures.
+5. Verdict: `reproduced`, or `diverged at seq N` with the record type and the first field that
+   differs.
+
+## Soft invariants (milestone 5)
+
+Soft invariants are advisory, like a linter. Two rules are **enforced in code**, not by
+convention:
+
+- **Outcome is hard-only.** A soft invariant returns `list[AdvisoryNote]`, a different type from
+  `Violation` with a different code path. The harness writes `run.end` (outcome and exit code,
+  computed from hard failures only) **before** it runs any soft invariant, so a soft result can't
+  reach the outcome even by mistake.
+- **`apply` never reads soft records.** `apply`, `approval`, `dryrun`, the hard engine and replay
+  don't import the soft module. A test scans their imports and fails if any of them does.
+
+**Judges.** A soft invariant may ask a judge (an LLM or anything else) for an opinion. The judge's
+input and full output (verdict, rationale, model) are recorded in the `advisory.note` record.
+
+**Replay never calls a judge.** It reads the recorded judge output from the log and reports it.
+That keeps replay to "re-evaluation from the log alone", and a model giving a different answer
+today says nothing about what the run did. Re-execution replay copies no advisory records and
+re-judges nothing. It reports the recorded notes beside its verdict. Asking a judge again is a
+separate, explicit action, if it is ever built.
 
 ## The first two invariants (refund_path)
 

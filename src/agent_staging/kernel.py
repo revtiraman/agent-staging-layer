@@ -51,6 +51,17 @@ class StateMeta:
 
 
 @dataclass(frozen=True)
+class Origin:
+    """Where a branch came from: enough to open an identical one again (re-execution replay)."""
+
+    twin: str
+    state: str | None
+    file_sha256: str | None
+    seed: int | None
+    start: datetime
+
+
+@dataclass(frozen=True)
 class Call:
     """One call made on a branch, in order: `i` is its position."""
 
@@ -100,6 +111,8 @@ class Described:
 
 class Branch(Protocol):
     """A running copy of a state. Changes stay here until frozen into a new state."""
+
+    origin: Origin
 
     def call(self, tool: str, /, **arguments: Any) -> Any:
         """Run a tool. Raises TwinToolError if the tool refuses."""

@@ -25,7 +25,7 @@ import random
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 type RequestFaultKind = Literal["rate_limited", "not_sent", "lost_response"]
 REQUEST_FAULTS: frozenset[str] = frozenset({"rate_limited", "not_sent", "lost_response"})
@@ -69,6 +69,20 @@ class Delivery:
 class RequestFault:
     kind: RequestFaultKind
     retry_after: float | None = None  # seconds, for rate_limited
+
+
+class FaultSource(Protocol):
+    """Where the harness gets fault decisions: drawn from a seed (`Faults`), or read back from a
+    run log (`agent_staging.reexec.RecordedFaults`). Each method returns the decision and the
+    exact record to log."""
+
+    def profile(self) -> dict[str, Any]: ...
+
+    def schedule(self, event_seq: int, emitted_at: datetime) -> tuple[list[Delivery], list[dict[str, Any]]]: ...
+
+    def order(self, batch: Sequence[Delivery], batch_no: int) -> tuple[list[Delivery], dict[str, Any] | None]: ...
+
+    def request(self, n: int, tool: str) -> tuple[RequestFault | None, dict[str, Any] | None]: ...
 
 
 @dataclass(frozen=True)

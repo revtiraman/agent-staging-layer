@@ -31,6 +31,7 @@ from agent_staging.kernel import (
     Call,
     Change,
     Event,
+    Origin,
     StateMeta,
     TwinToolError,
     as_timedelta,
@@ -62,9 +63,10 @@ def _set_clock(clock: seahaven.Clock, instant: datetime) -> None:
 
 
 class SeahavenBranch:
-    def __init__(self, twin: SeahavenTwin, inst: seahaven.Instance) -> None:
+    def __init__(self, twin: SeahavenTwin, inst: seahaven.Instance, origin: Origin) -> None:
         self._twin = twin
         self._inst = inst
+        self.origin = origin
         self._events: list[Event] = []
         self._codes: dict[int, str] = {}  # Seahaven's call log keeps the message, not the code
 
@@ -194,7 +196,8 @@ class SeahavenTwin:
             raise KernelError("an empty twin needs a start time (the kernel never reads the wall clock)")
         now = None if start is None else _ms(start)
         with self.world.instance(state_id, now=now, seed=seed, clock_mode="fixed") as inst:
-            yield SeahavenBranch(self, inst)
+            sha = None if state_id is None else self.state(state_id).file_sha256
+            yield SeahavenBranch(self, inst, Origin(self.name, state_id, sha, seed, inst.clock.now()))
 
     def is_mutating(self, tool: str) -> bool:
         return tool in self.mutating_tools

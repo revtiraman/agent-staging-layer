@@ -79,7 +79,8 @@ def test_every_schedule_is_logged_with_its_seed_even_with_no_faults(ws: Workspac
         (1, 0, 11, "webhook/1"),
         (2, 0, 11, "webhook/2"),
     ]
-    assert records(run)[1]["type"] == "faults.profile" and records(run)[1]["data"]["seed"] == 11
+    (profile,) = records(run, "faults.profile")
+    assert profile["data"]["seed"] == 11
 
 
 def test_a_decision_is_logged_before_its_effect(ws: Workspace) -> None:
