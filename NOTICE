@@ -1,0 +1,15 @@
+Agent Staging Layer
+Copyright 2026 Revtiraman Tripathi
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party components:
+
+1. Seahaven (https://github.com/Kiln-AI/Seahaven), used as an unmodified dependency.
+   MIT License. Copyright (c) 2026 Kiln AI.
+
+2. Stripe OpenAPI specification (https://github.com/stripe/openapi). Planned for the Stripe twin
+   (milestone 8); not yet included in this repository.
+   MIT License. Copyright (c) 2011- Stripe, Inc.
+
+Agent Staging Layer is not affiliated with Stripe, Inc. or Kiln AI.

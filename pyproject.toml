@@ -1,0 +1,35 @@
+[project]
+name = "agent-staging"
+version = "0.1.0"
+description = "Staging, simulation and dry-run infrastructure for AI agents."
+readme = "README.md"
+authors = [
+    { name = "Revtiraman Tripathi" }
+]
+requires-python = ">=3.14"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+dependencies = [
+    "seahaven==0.5.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.10.9,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.10",
+]
+
+[project.scripts]
+staging = "agent_staging.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["research", ".staging", ".venv"]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["research"]

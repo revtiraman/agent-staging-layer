@@ -1,7 +1,6 @@
-# Draft: licence request to Kiln (not sent)
+# Licence request to Kiln
 
-Where: a new issue on https://github.com/Kiln-AI/stripe_world (issues are enabled; no existing
-issue asks this). The maintainer is @scosman (Steve Cosman), who also wrote Seahaven.
+Posted 2026-10-08: https://github.com/Kiln-AI/stripe_world/issues/9 (from @revtiraman).
 
 ---
 
@@ -21,7 +20,9 @@ with human approval. I ran stripe_world locally: its tests pass (1,104), and its
 is the most faithful I've found. I'd much rather depend on it, and send back the webhook
 delivery the README lists as missing, than write a second Stripe world.
 
-If you'd prefer a different licence, or want to keep it unlicensed, that's useful to know too.
+If MIT doesn't fit, any OSI-approved licence works for me — I just need to know which.
+
+Happy to open the webhook PR first, before you decide on the licence, if that helps — no strings attached.
 
 Thanks,
 Revtiraman
