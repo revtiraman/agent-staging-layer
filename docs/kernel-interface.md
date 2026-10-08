@@ -86,6 +86,14 @@ stripe_world serves its Stripe API that way. So a Stripe twin served over HTTP f
 SDKs must turn **each HTTP request into one top-level kernel call**. Otherwise every write it
 makes is blocked. That's a milestone 8 design constraint.
 
+stripe_world's **tool path** (`stripe_api_write`, its Stripe-MCP surface) was checked on
+2026-10-09 and **does** keep attribution: a customer create, a refund (refund, charge update,
+balance transaction, two events), a refused over-refund (no rows) and a customer update
+each mapped every changed row to its call, with none left over. So the stripe_world option for
+milestone 8 is "use it as a library through its tools", not "run its HTTP server". Caveats:
+its MCP surface has no charge or PaymentIntent creation (charges come from the seeded state),
+and the probe ran on its pinned Seahaven `0.0.1`; whether it works with `0.5.0` is UNVERIFIED.
+
 ## Events
 
 A twin that sends notifications (webhooks) declares an outbox: rows a call inserts there are

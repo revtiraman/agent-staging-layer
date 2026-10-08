@@ -75,8 +75,10 @@ built first.
   `seahaven.http`, which runs each request inside `bulk()`, where changed rows lose the call
   that made them. Depending on it "unmodified" over HTTP would therefore make every write
   BLOCKED in our plans. Either route each HTTP request through one top-level kernel call (our
-  own thin HTTP front), or drive stripe_world through its tool path. Whether that path keeps
-  attribution is UNVERIFIED; check it first in milestone 8 (`docs/kernel-interface.md`, rule 3).
+  own thin HTTP front), or drive stripe_world through its tool path. **Checked 2026-10-09: the
+  tool path keeps attribution** (`docs/kernel-interface.md`, rule 3). So the licensed option is
+  "stripe_world as a library through `stripe_api_write`", not as an HTTP server. Compatibility
+  with Seahaven 0.5.0 (it pins 0.0.1) is UNVERIFIED.
 - **Not:** Volter as a dependency (competitor; kernel source not public). Its fork/plan/lease
   design is studied in `docs/research/volter-plan-fork-lease.md`.
 
