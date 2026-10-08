@@ -1,6 +1,6 @@
 # The twin kernel interface
 
-Status: milestone 2, 2026-10-08. Code form: `src/agent_staging/kernel.py`.
+Status: milestone 2, 2026-10-08; events section revised in milestone 3, 2026-10-09. Code form: `src/agent_staging/kernel.py`.
 
 This is the contract between the staging layer (dry-run, plan, approval, apply, run log,
 scenarios) and a twin. It describes **what** a twin must do, not how. Read it before adding
@@ -18,7 +18,7 @@ twin is committed to, it can change this document then.
 | Part | Meaning | Why the staging layer needs it |
 | --- | --- | --- |
 | `state(id)` | A saved state: world name and version, schema hash, file hash, the twin's time when saved | The plan records exactly which state it was computed from; apply refuses if that file changed |
-| `open(state, start, seed, delivery_delay)` | A **branch**: a private running copy of a state | Dry-runs and applies never touch the saved state until a branch is frozen |
+| `open(state, start, seed)` | A **branch**: a private running copy of a state | Dry-runs and applies never touch the saved state until a branch is frozen |
 | `is_mutating(tool)` | Whether a tool is allowed to change state | A tool that writes without being declared mutating blocks the plan |
 | `is_irreversible(tool)` | Whether the real-world effect can't be undone (an email sent) | Shown on the plan; the human sees it before approving |
 | `assigned_columns(table)` | Which columns the system fills in, and with what: `id` or `time` | See rule 2 |
@@ -33,8 +33,8 @@ twin is committed to, it can change this document then.
 | `changes()` | Every changed row: `i` (which call), table, insert/update/delete, key, before, after |
 | `row(table, key)` | Read one row by key, for describing and stale checks. Not a tool, not logged |
 | `now()` | The twin's current time |
-| `advance(duration)` | Move time forward, delivering due events (rule 1) |
-| `pending()` / `subscribe(handler)` | Events not yet delivered / where delivered events go |
+| `advance(duration)` | Move time forward. Only that: the harness steps it to each delivery's due time (rule 1) |
+| `events()` | Every event emitted so far, in order (see Events) |
 | `freeze(id, description)` | Save the branch as a new state |
 
 ## The three rules
@@ -45,14 +45,14 @@ twin is committed to, it can change this document then.
   harness calls `advance(duration)`. Tool calls do not move it.
 - World code reads time only through the kernel. Under Seahaven that is `ctx.clock`, which
   also backs SQL's `'now'` and `CURRENT_TIMESTAMP`. A test scans the twins for wall-clock reads.
-- `advance(d)` delivers every event due at or before `now + d`, in (due time, emission order),
-  with the clock set to **each event's own due time** while its handler runs. So a webhook
+- The harness's `advance(d)` delivers every delivery due at or before `now + d`, stepping the
+  branch's clock to **each delivery's own due time** while its handler runs. So a webhook
   due at T+40 is handled at T+40 even if the harness jumps from T+10 to T+50.
 - Durations are never negative. Time is millisecond precision.
 - Same state, same seed, same calls, same advances: same changes, same events, same delivery
   times. Nothing in a twin may depend on the wall clock or on unseeded randomness.
-- Only the harness can move time. The agent's interface (`Session`) has `call` and `on_event`,
-  and nothing else.
+- Only the harness can move time or see the fault profile. The agent's interface (`Session`)
+  has `call` and `on_event`, and nothing else.
 
 Why it matters: the bugs this product exists to catch are sequence bugs across time
 (refund at T+0, webhook at T+40, agent retries at T+10). They can only be reproduced if time
@@ -99,9 +99,11 @@ and the probe ran on its pinned Seahaven `0.0.1`; whether it works with `0.5.0` 
 A twin that sends notifications (webhooks) declares an outbox: rows a call inserts there are
 events. Because the outbox row is written in the same call as the change it reports, a
 refused call emits nothing, and the event appears in the plan's row changes like any other
-write. Delivery is the harness's job: `delivery_delay` after emission today, a seeded schedule
-of delays, duplicates and reorders in milestone 3. Pending deliveries live on the branch, not
-in saved states.
+write. The branch only records emitted events (`events()`), each with its id, the call that
+emitted it, and when. **When, how often and in what order they arrive is not the twin's
+business**: since milestone 3 the harness decides it from a seeded fault profile and logs
+every decision (`src/agent_staging/harness.py`, `faults.py`; spike-notes decision 6). Pending
+deliveries live in the harness, not in saved states.
 
 ## Errors
 

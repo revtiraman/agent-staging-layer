@@ -88,7 +88,7 @@ built first.
 | --- | --- | --- |
 | 1 | 3-day spike: dry-run → diff → approve UX on `refund_path` (Seahaven change log). **Done 2026-10-08** | No |
 | 2 | `TwinKernel` protocol + Seahaven adapter + harness-owned virtual clock. **Done 2026-10-08** (`docs/kernel-interface.md`) | No |
-| 3 | Seeded fault middleware + webhook scheduler (delay, duplicate, reorder, 429, timeout) | No |
+| 3 | Seeded fault middleware + webhook scheduler (delay, duplicate, reorder, 429, timeout). **Done 2026-10-09** (spike-notes, decisions 6–8) | No |
 | 4 | Scenario + hard-invariant engine | No |
 | 5 | Hash-chained run log + `staging replay` (environment replay) | No |
 | 6 | Dry-run: plan with full-content hash, human-only approval, per-object stale check, apply | No |

@@ -3,9 +3,9 @@
 Staging, simulation and dry-run infrastructure for AI agents that write to SaaS systems.
 Stripe first.
 
-**Status: milestone 2 done** (milestone 1: dry-run → diff → approve → apply on a test world;
-milestone 2: twin kernel interface and a harness-owned clock with delayed webhook delivery).
-Not a product yet: no Stripe twin, no faults, no replay.
+**Status: milestone 3 done** (1: dry-run → diff → approve → apply on a test world; 2: twin
+kernel interface and a harness-owned clock; 3: seeded, logged faults: webhook delay, duplicate,
+same-instant reorder, 429, timeout). Not a product yet: no Stripe twin, no invariants, no replay.
 
 > **Security status:** In milestones 1–5, approval defends against a buggy agent (one that proposes more than intended). It does not yet defend against a hostile agent with shell access; that requires sandboxing the agent and signing approvals, which land in milestone 6. Do not deploy this against an agent you don't trust to run your own code.
  Read, in order:

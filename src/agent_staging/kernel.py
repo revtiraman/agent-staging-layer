@@ -8,7 +8,8 @@ docs/kernel-interface.md; this module is its code form.
 
 Three rules the types encode:
   * Time belongs to the harness. A branch's clock moves only when `advance()` is called,
-    and world code reads time only through the kernel (`ctx.clock` under Seahaven).
+    and world code reads time only through the kernel (`ctx.clock` under Seahaven). The
+    twin emits events; the harness decides when, how often and in what order they arrive.
   * Ids a branch assigns are not stable. Columns the system fills in (`assigned_columns`)
     are marked, so nothing above the kernel has to assume an id seen in a dry-run is the
     id production will give.
@@ -18,7 +19,7 @@ Three rules the types encode:
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -77,13 +78,15 @@ class Change:
 
 @dataclass(frozen=True)
 class Event:
-    """A notification the twin sends out (a webhook), and when the harness delivers it."""
+    """A notification the twin emitted (a webhook). When it is delivered is the harness's
+    decision (agent_staging.harness), not the twin's."""
 
-    seq: int  # emission order on this branch; ties on `due` deliver in this order
+    seq: int  # emission order on this branch, from 1
+    id: str  # the twin's own event id, which an agent can use to drop duplicates
     type: str
     payload: dict[str, Any]
     emitted_at: datetime
-    due: datetime
+    i: int  # the call that emitted it
 
 
 @dataclass(frozen=True)
@@ -114,17 +117,13 @@ class Branch(Protocol):
         """What time the twin thinks it is."""
         ...
 
-    def advance(self, by: timedelta | float) -> list[Event]:
-        """Move the clock forward `by` (seconds if a number), delivering every event that
-        falls due on the way, each at its own due time, in (due, seq) order. Returns them."""
+    def advance(self, by: timedelta | float) -> None:
+        """Move the clock forward `by` (seconds if a number). Nothing else happens: delivering
+        events that fall due is the harness's job, which steps the clock to each due time."""
         ...
 
-    def pending(self) -> list[Event]:
-        """Events emitted but not yet due, in delivery order."""
-        ...
-
-    def subscribe(self, handler: Callable[[Event], None]) -> None:
-        """Receive events as they are delivered (the agent's webhook endpoint)."""
+    def events(self) -> list[Event]:
+        """Every event emitted on this branch so far, in emission order."""
         ...
 
     def freeze(self, state_id: str, description: str) -> StateMeta: ...
@@ -144,13 +143,11 @@ class TwinKernel(Protocol):
         *,
         start: datetime | None = None,
         seed: int | None = None,
-        delivery_delay: timedelta = timedelta(0),
     ) -> AbstractContextManager[Branch]:
         """Branch a saved state (or an empty twin if `state_id` is None, which needs `start`).
 
         The clock starts at the state's own time, or at `start` if given (never earlier).
-        `seed` fixes every seeded value the twin draws. `delivery_delay` is how long after
-        emission each event is delivered; milestone 3 replaces it with a seeded schedule.
+        `seed` fixes every seeded value the twin draws.
         """
         ...
 

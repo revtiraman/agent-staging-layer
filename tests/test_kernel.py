@@ -5,18 +5,22 @@
 The webhook-delay scenario is the one milestone 3 will run with seeded faults; here it
 proves the interface can express it: request at T+0, webhook due at T+40, the agent acts
 at T+10 before it arrives, then the harness advances 40 s and the webhook fires at T+40.
+Since milestone 3 the delay is a (fixed) fault profile, and delivery is the harness's.
 """
 
 from __future__ import annotations
 
 import ast
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from agent_staging import dryrun, spike
+from agent_staging.faults import Faults
 from agent_staging.harness import Run
 from agent_staging.kernel import Event
 from agent_staging.runlog import RunLog
@@ -137,21 +141,21 @@ def run_webhook_scenario(ws: Workspace, seed: int = 7) -> tuple[ForgetfulSupport
     twin = spike.twin(ws)
     log = RunLog.create(ws.root / "runs" / f"scenario-{seed}" / "log.jsonl", {"kind": "scenario", "seed": seed})
     agent = ForgetfulSupportAgent()
-    with twin.open("prod-0001", seed=seed, delivery_delay=40) as branch:
-        run = Run.start(branch, log)
+    with twin.open("prod-0001", seed=seed) as branch:
+        run = Run.start(branch, log, Faults(seed=seed, webhook_delay=(40, 40)))
         run.session.on_event(agent.on_event)
 
         agent.request(run.session, "charge-0001")  # T+0: the refund, webhook due T+40
-        assert [e.due for e in branch.pending()] == [at(40)]
+        assert [d.due for d in run.pending()] == [at(40)]
 
         run.advance(10)  # T+10: the agent acts before the webhook arrives
         agent.follow_up(run.session, "charge-0001")
-        assert agent.confirmed == {} and branch.pending()
+        assert agent.confirmed == {} and run.pending()
 
         delivered = run.advance(40)  # to T+50; the webhook falls due on the way, at T+40
 
-        assert [(e.type, e.due) for e in delivered] == [("refund.created", at(40))]
-        assert branch.pending() == [] and run.now() == at(50)
+        assert [(d.event_seq, d.due) for d in delivered] == [(1, at(40))]
+        assert run.pending() == [] and run.now() == at(50)
         state = {
             "charge": branch.row("charges", {"id": "charge-0001"}),
             "refunds": [c.after for c in branch.changes() if c.table == "refunds" and c.op == "insert"],
@@ -182,26 +186,33 @@ def test_webhook_delay_scenario(ws: Workspace) -> None:
     assert run.log.verify() == []
 
 
+@contextmanager
+def a_run(ws: Workspace, faults: Faults | None = None, name: str = "t") -> Iterator[Run]:
+    log = RunLog.create(ws.root / "runs" / name / "log.jsonl", {"kind": "test"})
+    with spike.twin(ws).open("prod-0001") as branch:
+        yield Run.start(branch, log, faults)
+
+
 def test_the_webhook_does_not_arrive_a_millisecond_early(ws: Workspace) -> None:
-    with spike.twin(ws).open("prod-0001", delivery_delay=40) as branch:
-        branch.call("refund_charge", charge_id="charge-0001")
-        assert branch.advance(timedelta(seconds=39, milliseconds=999)) == []
-        assert len(branch.advance(timedelta(milliseconds=1))) == 1
+    with a_run(ws, Faults(webhook_delay=(40, 40))) as run:
+        run.session.call("refund_charge", charge_id="charge-0001")
+        assert run.advance(timedelta(seconds=39, milliseconds=999)) == []
+        assert len(run.advance(timedelta(milliseconds=1))) == 1
 
 
 def test_events_due_together_arrive_in_emission_order_and_handlers_run_at_delivery_time(ws: Workspace) -> None:
     seen: list[tuple[str, datetime]] = []
-    with spike.twin(ws).open("prod-0001", delivery_delay=5) as branch:
+    with a_run(ws, Faults(webhook_delay=(5, 5))) as run:
 
-        def handler(event: Event) -> None:
-            seen.append((event.payload["charge_id"], branch.now()))
+        def handler(session: Session, event: Event) -> None:
+            seen.append((event.payload["charge_id"], run.now()))
             if event.seq == 1:  # a handler that writes emits another event
-                branch.call("refund_charge", charge_id="charge-0002")
+                session.call("refund_charge", charge_id="charge-0002")
 
-        branch.subscribe(handler)
-        branch.call("refund_charge", charge_id="charge-0001", amount=100)
-        branch.call("refund_charge", charge_id="charge-0001", amount=200)
-        branch.advance(60)
+        run.session.on_event(handler)
+        run.session.call("refund_charge", charge_id="charge-0001", amount=100)
+        run.session.call("refund_charge", charge_id="charge-0001", amount=200)
+        run.advance(60)
     assert seen == [("charge-0001", at(5)), ("charge-0001", at(5)), ("charge-0002", at(10))]
 
 
@@ -217,10 +228,10 @@ def test_the_scenario_is_deterministic_under_a_seed(tmp_path: Path) -> None:
 
 
 def test_a_refused_call_emits_no_event(ws: Workspace) -> None:
-    with spike.twin(ws).open("prod-0001", delivery_delay=1) as branch:
+    with spike.twin(ws).open("prod-0001") as branch:
         with pytest.raises(Exception, match="already fully refunded"):
             branch.call("refund_charge", charge_id="charge-0003")
-        assert branch.pending() == []
+        assert branch.events() == []
 
 
 def test_error_codes_survive_into_the_call_log(ws: Workspace) -> None:

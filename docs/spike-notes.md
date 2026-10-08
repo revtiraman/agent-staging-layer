@@ -121,6 +121,66 @@ customer elsewhere doesn't block the apply (tested).
 5. **Test harness noise.** Python 3.14 warns that `forkpty()` in a multi-threaded process may
    deadlock. The child calls `exec` immediately, so the warning is filtered in the tests.
 
+## Milestone 3 decisions (2026-10-09)
+
+**6. Reorder happens only within a batch due at the same instant.** Of the two designs (a: reorder
+only within a same-instant batch; b: let a small window of events swap across instants), we chose
+**(a)**.
+
+- *What it means.* At each instant the harness takes every delivery due exactly then, and the fault
+  profile decides their order (emission order, or a seeded shuffle). Deliveries due even 1 ms apart
+  are in different batches and are never swapped by the reorder fault.
+- *Order still inverts across instants*, which is the real-world bug (refund.updated arriving
+  before refund.created). It happens through each delivery's own seeded delay: event 2 with a
+  short delay overtakes event 1 with a long one. Each delay is a logged decision.
+- *Why (a).* With (a), every ordering decision depends only on due times, which are themselves
+  logged decisions made at emission. With (b), the scheduler would have to decide whether a
+  pending event may overtake one that hasn't been emitted yet, so the outcome would depend on what
+  it can see when it decides, which depends on how far the harness has advanced. `advance(10)` and
+  `advance(1)` ten times could then deliver in different orders, and replay (milestones 5 and 6)
+  would have to reproduce the harness's stepping as well as its decisions. (a) has no such
+  dependence, and the test proves it.
+- *Same instant, second batch.* A delivery a handler causes that is due at the current instant
+  forms the *next* batch at that instant. It is never merged into the batch being delivered.
+- *Tests.* `test_reorder_happens_within_a_same_instant_batch` (both due T+10, delivered 2 then 1),
+  `test_reorder_never_crosses_instants_even_a_millisecond_apart` (the boundary: due T+10.000 and
+  T+10.001 with `reorder_rate=1`, delivered 1 then 2),
+  `test_cross_instant_inversions_come_only_from_logged_delays` (15 seeds; the delivery order is
+  rebuilt from logged decisions alone and matches; at least one seed inverts), and
+  `test_how_finely_the_harness_steps_time_changes_nothing` (1, 2 and 199 steps give identical
+  deliveries).
+
+**7. Every fault decision is a run-log record, with its seed, before its effect.** Record type
+`fault`, with `kind`, `seed`, `key` and the decision itself:
+
+| kind | When it's written | Decision recorded |
+| --- | --- | --- |
+| `webhook.schedule` | Every event, even with no faults (delay 0) | `event_seq`, `copy`, `delay_ms`, `due` |
+| `webhook.duplicate` | When an event gets a second delivery | `copy: 1`, `gap_ms`, `due` |
+| `webhook.batch` / `webhook.reorder` | Every same-instant batch of 2 or more | `emitted_order`, `delivery_order` |
+| `request.rate_limited` / `request.not_sent` / `request.lost_response` | When a request is faulted | `request`, `tool`, `source` (`drawn` or `pinned`), `retry_after` |
+
+- Each decision draws from its own stream, `sha256(seed, key)`, keyed by event or request number,
+  so adding one decision never shifts another.
+- The profile itself is the run's `faults.profile` record.
+- No record for a request means no fault on it. Every request has its own `call` record (with
+  `request`, the twin's `i` or null, `reached_twin`, and the twin's result even when the agent
+  only saw a timeout).
+- Replay reads these records. It must never re-draw from the seed, so the log is the only source
+  of truth.
+
+**8. Scheduling moved out of the kernel.** In milestone 2 the branch delivered events. Now the
+branch only records them (`events()`) and moves its clock. The harness (`Run`) owns the queue,
+the fault profile, delivery and the log, because faults and the log are harness concerns and a
+twin shouldn't know it is being faulted. The milestone 2 tests moved to `Run` with their
+assertions unchanged.
+
+**Timeouts come in two kinds, and the agent can't tell them apart.** `not_sent` never reaches the
+twin. `lost_response` runs on the twin and the response is dropped. Both return the same
+`timeout` error. `test_a_lost_response_timeout_lets_a_naive_retry_refund_twice` shows the failure
+this exists for: $100 refunded on a $50 request. Turning that into a failed run is milestone 4's
+invariant engine.
+
 ## Planted for milestone 6 (not built)
 
 - **Id mapping:** plans will name created objects by what they are ("the refund for

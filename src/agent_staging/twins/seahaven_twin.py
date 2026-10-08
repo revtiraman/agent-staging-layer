@@ -10,16 +10,15 @@ computes every reading on demand from one shared Clock object, so the tools (`ct
 SQL (`CURRENT_TIMESTAMP`, `datetime('now')`) and `freeze()` all see the moved instant.
 tests/test_kernel.py checks all three, so a Seahaven upgrade that breaks this fails loudly.
 
-Events: a world declares an outbox table. Each row a call inserts there is one event,
-scheduled for delivery `delivery_delay` after it was emitted. Delivery happens only in
-`advance()`. Pending deliveries live on the branch, not in the saved state (milestone 3).
+Events: a world declares an outbox table. Each row a call inserts there is one event. The
+branch only records them; scheduling and delivery are the harness's (agent_staging.harness).
 """
 
 from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -63,13 +62,10 @@ def _set_clock(clock: seahaven.Clock, instant: datetime) -> None:
 
 
 class SeahavenBranch:
-    def __init__(self, twin: SeahavenTwin, inst: seahaven.Instance, delivery_delay: timedelta) -> None:
+    def __init__(self, twin: SeahavenTwin, inst: seahaven.Instance) -> None:
         self._twin = twin
         self._inst = inst
-        self._delay = delivery_delay
-        self._pending: list[Event] = []
-        self._seq = 0
-        self._handlers: list[Callable[[Event], None]] = []
+        self._events: list[Event] = []
         self._codes: dict[int, str] = {}  # Seahaven's call log keeps the message, not the code
 
     # --- calls and state ---
@@ -81,7 +77,7 @@ class SeahavenBranch:
         except seahaven.ToolError as e:
             self._codes[i] = e.code
             raise TwinToolError(e.code, str(e)) from None
-        self._schedule(i)
+        self._collect(i)
         return result
 
     def calls(self) -> list[Call]:
@@ -127,42 +123,28 @@ class SeahavenBranch:
     def now(self) -> datetime:
         return self._inst.clock.now()
 
-    def advance(self, by: timedelta | float) -> list[Event]:
-        target = _ms(self.now() + as_timedelta(by))
-        delivered = []
-        while self._pending and self._pending[0].due <= target:
-            event = self._pending.pop(0)
-            _set_clock(self._inst.clock, event.due)  # the handler runs at the delivery instant
-            for handler in self._handlers:
-                handler(event)
-            delivered.append(event)
-        _set_clock(self._inst.clock, target)
-        return delivered
+    def advance(self, by: timedelta | float) -> None:
+        _set_clock(self._inst.clock, self.now() + as_timedelta(by))
 
-    def pending(self) -> list[Event]:
-        return list(self._pending)
+    def events(self) -> list[Event]:
+        return list(self._events)
 
-    def subscribe(self, handler: Callable[[Event], None]) -> None:
-        self._handlers.append(handler)
-
-    def _schedule(self, i: int) -> None:
+    def _collect(self, i: int) -> None:
         outbox = self._twin.outbox_table
         if outbox is None:
             return
         for change in self._inst.change_log():
             if change.i == i and change.table == outbox and change.op == "insert" and change.after is not None:
-                self._seq += 1
-                emitted = self.now()
-                self._pending.append(
+                self._events.append(
                     Event(
-                        seq=self._seq,
+                        seq=len(self._events) + 1,
+                        id=str(change.after["id"]),
                         type=str(change.after["type"]),
                         payload=json.loads(str(change.after["payload"])),
-                        emitted_at=emitted,
-                        due=_ms(emitted + self._delay),
+                        emitted_at=self.now(),
+                        i=i,
                     )
                 )
-        self._pending.sort(key=lambda e: (e.due, e.seq))
 
 
 class SeahavenTwin:
@@ -202,13 +184,12 @@ class SeahavenTwin:
         *,
         start: datetime | None = None,
         seed: int | None = None,
-        delivery_delay: timedelta = timedelta(0),
     ) -> Iterator[SeahavenBranch]:
         if state_id is None and start is None:
             raise KernelError("an empty twin needs a start time (the kernel never reads the wall clock)")
         now = None if start is None else _ms(start)
         with self.world.instance(state_id, now=now, seed=seed, clock_mode="fixed") as inst:
-            yield SeahavenBranch(self, inst, as_timedelta(delivery_delay))
+            yield SeahavenBranch(self, inst)
 
     def is_mutating(self, tool: str) -> bool:
         return tool in self.mutating_tools
