@@ -9,7 +9,7 @@ import json
 import logging
 import sys
 
-from agent_staging import apply, approval, dryrun, spike
+from agent_staging import apply, approval, dryrun, replay, spike
 from agent_staging.kernel import TwinToolError
 from agent_staging.runlog import RunLog, RunLogError
 from agent_staging.twins.seahaven_twin import KernelError
@@ -57,6 +57,18 @@ def _log(ws: Workspace, args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+def _replay(ws: Workspace, args: argparse.Namespace) -> int:
+    from agent_staging.twins.refund_path_invariants import INVARIANTS
+
+    result = replay.replay(ws, spike.twin(ws), args.run_id, INVARIANTS)
+    for f in result["failures"]:
+        print(f"FAILED {f['invariant']} v{f['version']} at step {f['step']}: {f['message']}")
+    for entry in result["invariants"]:
+        print(f"  {entry['invariant']}: {entry['outcome']}" + (f" ({entry['note']})" if "note" in entry else ""))
+    print(result["verdict"].upper())
+    return 0 if result["verdict"] == "reproduced" else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.getLogger("seahaven").setLevel(logging.CRITICAL)  # ToolErrors are reported by us
     parser = argparse.ArgumentParser(prog="staging", description="Staging layer for AI agents (spike).")
@@ -70,13 +82,24 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("apply", help="apply an approved plan to production")
     p.add_argument("plan_id")
     p.set_defaults(fn=_apply)
+    p = sub.add_parser("replay", help="re-evaluate a run's invariants from its log alone")
+    p.add_argument("run_id")
+    p.set_defaults(fn=_replay)
     p = sub.add_parser("log", help="print a run log and verify its hash chain")
     p.add_argument("run_id")
     p.set_defaults(fn=_log)
     args = parser.parse_args(argv)
     try:
         return args.fn(Workspace.from_env(), args)
-    except (dryrun.DryRunError, approval.ApprovalError, apply.ApplyError, RunLogError, KernelError, TwinToolError) as e:
+    except (
+        dryrun.DryRunError,
+        approval.ApprovalError,
+        apply.ApplyError,
+        replay.ReplayError,
+        RunLogError,
+        KernelError,
+        TwinToolError,
+    ) as e:
         print(f"staging: {e}", file=sys.stderr)
         return 2
 

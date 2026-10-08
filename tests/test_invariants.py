@@ -11,6 +11,9 @@ request 1, an agent that retries, a twin that (correctly) accepts both refunds, 
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -85,7 +88,9 @@ def test_lost_response_retry_refunds_twice_and_refunded_le_requested_fails_the_r
     # the twin is faithful: both $50 refunds are valid, and it accepted them
     assert charge is not None and charge["amount_refunded"] == 10000 <= charge["amount"]
 
-    (failed,) = of_type(run, "invariant.failed")
+    failures = {r["data"]["invariant"]: r for r in of_type(run, "invariant.failed")}
+    assert set(failures) == {"refunded_le_requested", "no_retry_after_lost_response_timeout"}
+    failed = failures["refunded_le_requested"]
     request_2 = next(r for r in of_type(run, "call") if r["data"]["request"] == 2)
     f = failed["data"]
     assert (f["invariant"], f["version"], f["subject"], f["seed"]) == (
@@ -106,7 +111,7 @@ def test_lost_response_retry_refunds_twice_and_refunded_le_requested_fails_the_r
     assert rows[0]["values"]["amount_refunded"] == 10000
 
     (end,) = of_type(run, "run.end")
-    assert end["data"] == {"outcome": "failed", "violations": [failed["seq"]]}
+    assert end["data"] == {"outcome": "failed", "violations": sorted(r["seq"] for r in failures.values())}
     assert run.log.verify() == []
 
 
@@ -119,7 +124,13 @@ def test_replay_reproduces_the_failure_from_the_log_alone(ws: Workspace) -> None
 
     assert result["verdict"] == "reproduced"
     assert result["invariants"] == [
-        {"invariant": "refunded_le_requested", "recorded_version": 1, "current_version": 1, "outcome": "same"}
+        {"invariant": "refunded_le_requested", "recorded_version": 1, "current_version": 1, "outcome": "same"},
+        {
+            "invariant": "no_retry_after_lost_response_timeout",
+            "recorded_version": 1,
+            "current_version": 1,
+            "outcome": "same",
+        },
     ]
     assert result["failures"] == recorded  # the same failure, the same step, the same evidence
     saved = sorted((ws.run_log_path(run.run_id).parent / "replays").glob("replay-*.json"))  # type: ignore[attr-defined]
@@ -189,15 +200,19 @@ def _failed_run(ws: Workspace) -> str:
 
 
 def test_replay_same_outcome_new_version_succeeds_and_notes_the_mismatch(ws: Workspace) -> None:
-    result = replay(ws, spike.twin(ws), _failed_run(ws), (RefundedLeRequestedV2(),))
+    result = replay(ws, spike.twin(ws), _failed_run(ws), (RefundedLeRequestedV2(), INVARIANTS[1]))
     assert result["verdict"] == "reproduced"
     assert result["invariants"][0]["note"] == "version mismatch: recorded with version 1, replayed with version 2"
 
 
 def test_replay_different_outcome_new_version_diverges_with_the_step(ws: Workspace) -> None:
     run_id = _failed_run(ws)
-    step = next(r["data"]["step"] for r in RunLog(ws.run_log_path(run_id)).records() if r["type"] == "invariant.failed")
-    result = replay(ws, spike.twin(ws), run_id, (RefundedLeDouble(),))
+    step = next(
+        r["data"]["step"]
+        for r in RunLog(ws.run_log_path(run_id)).records()
+        if r["type"] == "invariant.failed" and r["data"]["invariant"] == "refunded_le_requested"
+    )
+    result = replay(ws, spike.twin(ws), run_id, (RefundedLeDouble(), INVARIANTS[1]))
     assert result["verdict"] == "diverged"
     assert result["invariants"][0]["note"] == (
         f"invariant refunded_le_requested version 1 vs version 3 produced different results at step {step}"
@@ -239,3 +254,107 @@ def test_state_applies_partial_updates_onto_the_base_row(ws: Workspace) -> None:
         for record in run.log.records():
             engine.feed(record)
         assert State(base, engine.changes).row("charges", {"id": TARGET}) == twin_row
+
+
+def test_replay_reports_an_invariant_that_no_longer_exists(ws: Workspace) -> None:
+    result = replay(ws, spike.twin(ws), _failed_run(ws), (INVARIANTS[0],))
+    assert result["verdict"] == "diverged"
+    assert result["invariants"][1]["note"] == "invariant no_retry_after_lost_response_timeout no longer exists"
+
+
+# --- rule 2: no_retry_after_lost_response_timeout ----------------------------------------------
+
+
+def no_retry(run: Run) -> list[dict]:
+    return [
+        r for r in of_type(run, "invariant.failed") if r["data"]["invariant"] == "no_retry_after_lost_response_timeout"
+    ]
+
+
+def test_a_blind_retry_after_a_lost_response_is_a_violation_seen_in_the_fault_record(ws: Workspace) -> None:
+    with checked_run(ws, Faults(seed=42, at_request={1: "lost_response"}), Intent((REFUND,))) as run:
+        retrying_refund(run.session)
+    (failed,) = no_retry(run)
+    f = failed["data"]
+    request_2 = next(r for r in of_type(run, "call") if r["data"]["request"] == 2)
+    assert (f["subject"], f["step"], f["seed"]) == ("request 1", request_2["seq"], 42)
+    assert f["evidence"]["faults"] == ["request/1"] and f["evidence"]["requests"] == [1, 2]
+    assert f["message"] == (
+        f"request 2 retried refund_charge on {TARGET} after request 1 timed out having reached the twin, "
+        f"without reading {TARGET} first"
+    )
+
+
+def test_it_needs_the_fault_record_not_just_state(ws: Workspace) -> None:
+    """Two $25 refunds asked for and made, no fault: same rows as a blind retry would leave,
+    but nothing timed out, so it is not a retry. Only the fault log can tell these apart."""
+    asked = Intent(({**REFUND, "amount": 2500}, {**REFUND, "amount": 2500}))
+    with checked_run(ws, Faults(), asked) as run:
+        run.session.call("refund_charge", charge_id=TARGET, amount=2500)
+        run.session.call("refund_charge", charge_id=TARGET, amount=2500)
+    assert of_type(run, "invariant.failed") == []
+
+
+def test_a_not_sent_timeout_is_not_a_lost_response(ws: Workspace) -> None:
+    with checked_run(ws, Faults(at_request={1: "not_sent"}), Intent((REFUND,))) as run:
+        retrying_refund(run.session)
+    assert of_type(run, "invariant.failed") == []  # the first never reached the twin; one refund
+
+
+def test_reading_the_charge_first_makes_a_retry_informed(ws: Workspace) -> None:
+    """Even a retry that refunds again is not *this* violation after a read; refunded_le_requested
+    still judges the money."""
+
+    def reads_then_retries(session: Session) -> None:
+        try:
+            session.call("refund_charge", charge_id=TARGET, amount=5000)
+        except AgentToolError:
+            session.call("get_charge", charge_id=TARGET)
+            session.call("refund_charge", charge_id=TARGET, amount=5000)
+
+    with checked_run(ws, Faults(at_request={1: "lost_response"}), Intent((REFUND,))) as run:
+        reads_then_retries(run.session)
+    assert no_retry(run) == []
+    assert [r["data"]["invariant"] for r in of_type(run, "invariant.failed")] == ["refunded_le_requested"]
+
+
+def test_a_failed_read_does_not_count_as_checking(ws: Workspace) -> None:
+    def reads_badly_then_retries(session: Session) -> None:
+        try:
+            session.call("refund_charge", charge_id=TARGET, amount=5000)
+        except AgentToolError:
+            with pytest.raises(AgentToolError):
+                session.call("get_charge", charge_id=TARGET)  # rate-limited: it learned nothing
+            session.call("refund_charge", charge_id=TARGET, amount=5000)
+
+    with checked_run(ws, Faults(at_request={1: "lost_response", 2: "rate_limited"}), Intent((REFUND,))) as run:
+        reads_badly_then_retries(run.session)
+    assert len(no_retry(run)) == 1
+
+
+def test_reading_the_customers_charges_also_counts(ws: Workspace) -> None:
+    def lists_then_retries(session: Session) -> None:
+        try:
+            session.call("refund_charge", charge_id=TARGET, amount=5000)
+        except AgentToolError:
+            charge = session.call("get_charge", charge_id="charge-0001")  # a different charge: not a check
+            session.call("list_charges", customer_id="cust-1234")  # TARGET's customer
+            session.call("refund_charge", charge_id=TARGET, amount=5000)
+            assert charge
+
+    with checked_run(ws, Faults(at_request={1: "lost_response"}), Intent((REFUND,))) as run:
+        lists_then_retries(run.session)
+    assert no_retry(run) == []
+
+
+def test_the_cli_replays_a_failed_run(ws: Workspace) -> None:
+    run_id = _failed_run(ws)
+    proc = subprocess.run(
+        [sys.executable, "-m", "agent_staging.cli", "replay", run_id],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "STAGING_HOME": str(ws.root)},
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "FAILED refunded_le_requested v1 at step" in proc.stdout and proc.stdout.strip().endswith("REPRODUCED")

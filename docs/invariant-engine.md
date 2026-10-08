@@ -1,6 +1,6 @@
 # The invariant engine
 
-Status: milestone 4, design approved 2026-10-09. Code: `src/agent_staging/invariants.py`;
+Status: milestone 4, design approved and built 2026-10-09. CLI: `staging replay <run>`. Code: `src/agent_staging/invariants.py`;
 refund_path's invariants: `src/agent_staging/twins/refund_path_invariants.py`.
 
 An invariant is a rule a run must never break. The engine checks every **hard** invariant after
@@ -92,3 +92,14 @@ Outcomes, written to a replay record (`runs/<run>/replays/`):
    target again without first reading that target. The timeout said "may or may not have been
    applied", so a read is the only way to know. A retry after a read is the agent's informed
    choice, and `refunded_le_requested` still judges its result.
+
+## Found while building
+
+- **Seahaven's update records carry only the changed columns** in `after` (and `before`). State
+  is rebuilt by merging an update onto the row it changes, not by replacing the row
+  (`test_state_applies_partial_updates_onto_the_base_row`).
+- **The demo run fails both rules at request 2**, which is what should happen:
+  `refunded_le_requested` on the money ($100.00 refunded, $50.00 requested), and
+  `no_retry_after_lost_response_timeout` on the behaviour (a blind retry after a lost response).
+  Two $25 refunds that were both asked for leave the same kind of rows and fail neither rule.
+  Only the fault log tells them apart (`test_it_needs_the_fault_record_not_just_state`).
