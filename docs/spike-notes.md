@@ -52,9 +52,13 @@ one world.**
 Caveats:
 - Writes made with no call in flight (`inst.bulk()`) have `i = None`. The plan marks them
   BLOCKED, and a blocked plan can't be approved (tested).
-- Not yet verified: the same join over Seahaven's HTTP path, and under composition, where nested calls
-  share their parent's ordinal per its docs. Re-check both at milestone 2. A run-level correlation
-  id will still be needed across several worlds or real systems.
+- **Checked at milestone 2: the join does not survive Seahaven's HTTP path.** `seahaven.http`
+  runs each request inside `bulk()`, and a tool called from in there is logged as a call but its
+  rows get `i = None`, so the plan blocks them (safe;
+  `test_a_tool_call_inside_bulk_loses_its_attribution_and_blocks_the_plan`). stripe_world
+  serves its API that way, so the Stripe twin must make each HTTP request one top-level call
+  (`docs/kernel-interface.md`, rule 3). Composition was not checked: neither twin needs it.
+  A run-level correlation id will still be needed across several worlds or real systems.
 
 ## Decisions
 
@@ -108,9 +112,9 @@ customer elsewhere doesn't block the apply (tested).
    today approval defends against a buggy agent only. Needed: run the agent in a separate sandbox
    or OS user with no access to `.staging/`, and sign approvals with a key the agent can't read
    (milestone 6 and threat model).
-3. **World specifics are hard-wired.** `dryrun.py` and `apply.py` import `refund_path` directly
-   (mutating tools, `describe`, volatile columns). These become methods on the world adapter behind
-   the `TwinKernel` protocol (milestone 2).
+3. **World specifics are hard-wired.** Resolved in milestone 2: `dryrun.py` and `apply.py` take
+   a `TwinKernel`, and refund_path's specifics are methods on `RefundPath`. "Volatile columns"
+   became `assigned_columns` (`id` or `time`).
 4. **Apply is atomic only because the target is a twin.** Freezing a fixture is all-or-nothing.
    Against a real system, calls can half-succeed, so apply will need a per-call push ledger with
    idempotency keys and confirmation (Volter's push-ledger idea).

@@ -71,6 +71,12 @@ built first.
   hundred lines). It is test scaffolding, labelled as such, never shipped as "the Stripe twin".
   Whichever Stripe twin wins plugs in behind the same protocol, and the layer's tests rerun
   against it unchanged.
+- **Constraint found at milestone 2 (verified):** stripe_world serves its Stripe API through
+  `seahaven.http`, which runs each request inside `bulk()`, where changed rows lose the call
+  that made them. Depending on it "unmodified" over HTTP would therefore make every write
+  BLOCKED in our plans. Either route each HTTP request through one top-level kernel call (our
+  own thin HTTP front), or drive stripe_world through its tool path. Whether that path keeps
+  attribution is UNVERIFIED; check it first in milestone 8 (`docs/kernel-interface.md`, rule 3).
 - **Not:** Volter as a dependency (competitor; kernel source not public). Its fork/plan/lease
   design is studied in `docs/research/volter-plan-fork-lease.md`.
 
@@ -78,8 +84,8 @@ built first.
 
 | # | Milestone | Depends on Kiln? |
 | --- | --- | --- |
-| 1 | 3-day spike: dry-run → diff → approve UX on `refund_path` (Seahaven change log) | No |
-| 2 | `TwinKernel` protocol + Seahaven adapter + harness-owned virtual clock | No |
+| 1 | 3-day spike: dry-run → diff → approve UX on `refund_path` (Seahaven change log). **Done 2026-10-08** | No |
+| 2 | `TwinKernel` protocol + Seahaven adapter + harness-owned virtual clock. **Done 2026-10-08** (`docs/kernel-interface.md`) | No |
 | 3 | Seeded fault middleware + webhook scheduler (delay, duplicate, reorder, 429, timeout) | No |
 | 4 | Scenario + hard-invariant engine | No |
 | 5 | Hash-chained run log + `staging replay` (environment replay) | No |
