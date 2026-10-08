@@ -10,6 +10,11 @@ Rules (docs/spike-notes.md, decision 2):
   * The approval records the full plan hash. Apply recomputes the hash from the plan
     file and refuses if it differs (any edit voids the approval).
   * There is no actor kind "agent" and no flag that skips this.
+
+What this defends against today: a buggy agent, not a hostile one with shell access as the
+same OS user, which can fake a terminal or write approvals/ directly. `signature` is
+always None until milestone 6 signs `{format, plan_id, plan_hash, decision, actor, at}` with
+a key the agent cannot read; apply refuses any record that carries one before then.
 """
 
 from __future__ import annotations
@@ -24,6 +29,8 @@ from typing import Any
 from agent_staging.dryrun import Plan, render
 from agent_staging.runlog import RunLog
 from agent_staging.workspace import Workspace
+
+APPROVAL_FORMAT = "agent-staging.approval/1"
 
 
 class ApprovalError(Exception):
@@ -88,12 +95,14 @@ def decide(ws: Workspace, plan_id: str, *, terminal: Terminal | None = None) -> 
     answer = tty.readline().strip()
     decision = "approved" if answer == challenge(plan) else "rejected"
     record = {
+        "format": APPROVAL_FORMAT,
         "plan_id": plan.id,
         "plan_hash": plan.hash,
         "decision": decision,
         "actor": {"kind": "human", "id": getpass.getuser(), "channel": "tty"},
         "typed": answer,
-        "at": datetime.now(UTC).isoformat(timespec="milliseconds"),
+        "at": datetime.now(UTC).isoformat(timespec="milliseconds"),  # the human's time, not the twin's
+        "signature": None,  # milestone 6
     }
     ws.write_json(ws.approval_path(plan.id), record)
     RunLog(ws.run_log_path(plan.body["run_id"])).append("plan.decision", record)

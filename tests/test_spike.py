@@ -27,7 +27,6 @@ from agent_staging import apply, dryrun, spike
 from agent_staging.approval import ApprovalError, decide
 from agent_staging.dryrun import DryRunError, Plan
 from agent_staging.runlog import RunLog
-from agent_staging.twins.refund_path import make_world
 from agent_staging.workspace import Workspace
 
 
@@ -72,20 +71,19 @@ def approve_at_terminal(ws: Workspace, plan_id: str, typed: str) -> tuple[int, s
 
 
 def prod_rows(ws: Workspace, sql: str) -> list[dict]:
-    world = make_world(ws.fixtures)
-    with world.instance(ws.prod_head()) as inst:
+    with spike.twin(ws).world.instance(ws.prod_head()) as inst:
         return inst.db.rows(sql)
 
 
 def test_success_criterion_end_to_end(ws: Workspace) -> None:
     before = prod_rows(ws, "SELECT id, amount_refunded FROM charges ORDER BY id")
 
-    plan, run_id = dryrun.dry_run(ws, spike.support_agent, agent_name="spike.support_agent")
+    plan, run_id = dryrun.dry_run(ws, spike.twin(ws), spike.support_agent, agent_name="spike.support_agent")
 
     # the agent proposed three refunds: two valid, one skipped
     s = plan.body["summary"]
     assert (s["proposed"], s["to_apply"], s["skipped"], s["blocked"]) == (3, 2, 1, 0)
-    assert s["amount"] == 20000
+    assert s["amounts"] == {"usd": 20000}
     assert [op["describe"] for op in plan.body["operations"]] == [
         "Refund $120.00 on charge-0001 to cust-0001 <ana@example.com>",
         "Refund $80.00 on charge-0002 to cust-0002 <ben@example.com>",
@@ -100,7 +98,7 @@ def test_success_criterion_end_to_end(ws: Workspace) -> None:
     assert "Refund $120.00 on charge-0001" in screen and "APPROVED" in screen
 
     # the two refunds are applied to the twin
-    result = apply.apply_plan(ws, plan.id)
+    result = apply.apply_plan(ws, spike.twin(ws), plan.id)
     assert result == {"plan_id": plan.id, "previous": "prod-0001", "head": "prod-0002", "applied": 2}
     assert prod_rows(ws, "SELECT id, amount, amount_refunded FROM charges ORDER BY id") == [
         {"id": "charge-0001", "amount": 12000, "amount_refunded": 12000},
@@ -119,16 +117,16 @@ def test_success_criterion_end_to_end(ws: Workspace) -> None:
 
 
 def test_wrong_confirmation_rejects_and_apply_refuses(ws: Workspace) -> None:
-    plan, _ = dryrun.dry_run(ws, spike.support_agent, agent_name="t")
+    plan, _ = dryrun.dry_run(ws, spike.twin(ws), spike.support_agent, agent_name="t")
     code, screen = approve_at_terminal(ws, plan.id, "yes")
     assert code == 1 and "REJECTED" in screen
     with pytest.raises(ApprovalError, match="was rejected"):
-        apply.apply_plan(ws, plan.id)
+        apply.apply_plan(ws, spike.twin(ws), plan.id)
     assert ws.prod_head() == "prod-0001"
 
 
 def test_no_terminal_means_no_approval(ws: Workspace) -> None:
-    plan, _ = dryrun.dry_run(ws, spike.support_agent, agent_name="t")
+    plan, _ = dryrun.dry_run(ws, spike.twin(ws), spike.support_agent, agent_name="t")
     proc = subprocess.run(
         [sys.executable, "-m", "agent_staging.cli", "approve", plan.id],
         input=f"approve {plan.hash[:8]}\n",
@@ -143,20 +141,19 @@ def test_no_terminal_means_no_approval(ws: Workspace) -> None:
 
 
 def test_editing_an_approved_plan_voids_it(ws: Workspace) -> None:
-    plan, _ = dryrun.dry_run(ws, spike.support_agent, agent_name="t")
+    plan, _ = dryrun.dry_run(ws, spike.twin(ws), spike.support_agent, agent_name="t")
     assert approve_at_terminal(ws, plan.id, f"approve {plan.hash[:8]}")[0] == 0
     path = ws.plan_path(plan.id)
     data = json.loads(path.read_text())
     data["body"]["operations"][0]["arguments"]["amount"] = 1  # change what gets applied
     path.write_text(json.dumps(data))
     with pytest.raises(DryRunError, match="does not match its own hash"):
-        apply.apply_plan(ws, plan.id)
+        apply.apply_plan(ws, spike.twin(ws), plan.id)
     assert ws.prod_head() == "prod-0001"
 
 
 def _move_production(ws: Workspace, *calls: tuple[str, dict[str, object]]) -> None:
-    world = make_world(ws.fixtures)
-    with world.instance(ws.prod_head()) as inst:
+    with spike.twin(ws).open(ws.prod_head()) as inst:
         for tool, arguments in calls:
             inst.call(tool, **arguments)
         new_id = ws.next_prod_id()
@@ -165,19 +162,19 @@ def _move_production(ws: Workspace, *calls: tuple[str, dict[str, object]]) -> No
 
 
 def test_stale_when_production_changed_a_touched_row(ws: Workspace) -> None:
-    plan, _ = dryrun.dry_run(ws, spike.support_agent, agent_name="t")
+    plan, _ = dryrun.dry_run(ws, spike.twin(ws), spike.support_agent, agent_name="t")
     assert approve_at_terminal(ws, plan.id, f"approve {plan.hash[:8]}")[0] == 0
     _move_production(ws, ("refund_charge", {"charge_id": "charge-0001", "amount": 1000}))  # someone refunded $10
     with pytest.raises(apply.ApplyError, match="charges charge-0001.amount_refunded is 1000, plan expected 0"):
-        apply.apply_plan(ws, plan.id)
+        apply.apply_plan(ws, spike.twin(ws), plan.id)
     assert ws.prod_head() == "prod-0002"  # unchanged by the refused apply
 
 
 def test_unrelated_production_change_is_not_stale(ws: Workspace) -> None:
-    plan, _ = dryrun.dry_run(ws, spike.support_agent, agent_name="t")
+    plan, _ = dryrun.dry_run(ws, spike.twin(ws), spike.support_agent, agent_name="t")
     assert approve_at_terminal(ws, plan.id, f"approve {plan.hash[:8]}")[0] == 0
     _move_production(ws, ("create_customer", {"email": "dee@example.com"}))  # prod-0002
-    result = apply.apply_plan(ws, plan.id)
+    result = apply.apply_plan(ws, spike.twin(ws), plan.id)
     assert (result["previous"], result["head"], result["applied"]) == ("prod-0002", "prod-0003", 2)
     assert len(prod_rows(ws, "SELECT id FROM customers")) == 4
 
@@ -185,7 +182,7 @@ def test_unrelated_production_change_is_not_stale(ws: Workspace) -> None:
 def test_unrelated_refund_shifts_ids_and_apply_aborts_safely(ws: Workspace) -> None:
     """Known limitation (spike-notes, open issue 1): ids are counters, so an unrelated refund
     makes the replayed refunds get different ids than approved. Apply refuses; nothing lands."""
-    plan, _ = dryrun.dry_run(ws, spike.support_agent, agent_name="t")
+    plan, _ = dryrun.dry_run(ws, spike.twin(ws), spike.support_agent, agent_name="t")
     assert approve_at_terminal(ws, plan.id, f"approve {plan.hash[:8]}")[0] == 0
     _move_production(
         ws,
@@ -194,12 +191,12 @@ def test_unrelated_refund_shifts_ids_and_apply_aborts_safely(ws: Workspace) -> N
         ("refund_charge", {"charge_id": "charge-0004"}),
     )
     with pytest.raises(apply.ApplyError, match="refunds refund-0002 already exists"):
-        apply.apply_plan(ws, plan.id)
+        apply.apply_plan(ws, spike.twin(ws), plan.id)
     assert ws.prod_head() == "prod-0002"
 
 
 def test_tampered_run_log_is_detected(ws: Workspace) -> None:
-    _, run_id = dryrun.dry_run(ws, spike.support_agent, agent_name="t")
+    _, run_id = dryrun.dry_run(ws, spike.twin(ws), spike.support_agent, agent_name="t")
     path = ws.run_log_path(run_id)
     lines = path.read_text().splitlines()
     lines[2] = lines[2].replace("charge-0001", "charge-0009")
@@ -209,17 +206,17 @@ def test_tampered_run_log_is_detected(ws: Workspace) -> None:
 
 def test_a_write_outside_any_call_blocks_the_plan(ws: Workspace) -> None:
     def sneaky(session: object) -> None:
-        inst = session._instance  # type: ignore[attr-defined]
+        inst = session._branch._inst  # type: ignore[attr-defined]
         with inst.bulk() as ctx:  # a write with no tool call in flight
             ctx.db.execute("UPDATE charges SET amount_refunded = 1 WHERE id = 'charge-0001'")
 
-    plan, _ = dryrun.dry_run(ws, sneaky, agent_name="t")
+    plan, _ = dryrun.dry_run(ws, spike.twin(ws), sneaky, agent_name="t")
     assert plan.body["summary"]["blocked"] == 1
     with pytest.raises(ApprovalError, match="blocked writes"):
         decide(ws, plan.id)
 
 
 def test_plan_file_round_trip(ws: Workspace) -> None:
-    plan, _ = dryrun.dry_run(ws, spike.support_agent, agent_name="t")
+    plan, _ = dryrun.dry_run(ws, spike.twin(ws), spike.support_agent, agent_name="t")
     again = Plan.from_file(json.loads(ws.plan_path(plan.id).read_text()))
     assert again.hash == plan.hash

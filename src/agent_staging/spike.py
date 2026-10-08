@@ -8,9 +8,13 @@ carries on when a tool refuses, like a real agent reading an API error.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from agent_staging.session import AgentToolError, Session
-from agent_staging.twins.refund_path import make_world
+from agent_staging.twins.refund_path import RefundPath
 from agent_staging.workspace import Workspace
+
+START = datetime(2026, 10, 1, 9, 0, tzinfo=UTC)
 
 # Three customers asked for refunds. Support already refunded the third by hand, so the
 # agent's third refund must be refused, and the plan must show it as skipped.
@@ -21,11 +25,14 @@ REQUESTS = [
 ]
 
 
+def twin(ws: Workspace) -> RefundPath:
+    return RefundPath(ws.fixtures)
+
+
 def seed(ws: Workspace) -> str:
     if ws.prod_head() is not None:
         return ws.prod_head()  # type: ignore[return-value]
-    world = make_world(ws.fixtures)
-    with world.instance(now="2026-10-01T09:00:00.000Z", clock_mode="tick") as inst:
+    with twin(ws).open(None, start=START) as inst:
         for email, cents in [("ana@example.com", 12000), ("ben@example.com", 8000), ("cy@example.com", 9500)]:
             customer = inst.call("create_customer", email=email)
             inst.call("create_charge", customer_id=customer["id"], amount=cents)

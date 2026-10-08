@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Revtiraman Tripathi
-"""`staging` command line (milestone 1 subset)."""
+"""`staging` command line (spike subset; the twin is refund_path until milestone 7)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,9 @@ import logging
 import sys
 
 from agent_staging import apply, approval, dryrun, spike
+from agent_staging.kernel import TwinToolError
 from agent_staging.runlog import RunLog, RunLogError
+from agent_staging.twins.seahaven_twin import KernelError
 from agent_staging.workspace import Workspace
 
 
@@ -20,7 +22,7 @@ def _seed(ws: Workspace, _: argparse.Namespace) -> int:
 
 
 def _run(ws: Workspace, _: argparse.Namespace) -> int:
-    plan, run_id = dryrun.dry_run(ws, spike.support_agent, agent_name="spike.support_agent")
+    plan, run_id = dryrun.dry_run(ws, spike.twin(ws), spike.support_agent, agent_name="spike.support_agent")
     print(dryrun.render(plan))
     print(f"\nProduction was not changed. Run log: {ws.run_log_path(run_id)}")
     print(f"Next: staging approve {plan.id}")
@@ -36,7 +38,7 @@ def _approve(ws: Workspace, args: argparse.Namespace) -> int:
 
 
 def _apply(ws: Workspace, args: argparse.Namespace) -> int:
-    result = apply.apply_plan(ws, args.plan_id)
+    result = apply.apply_plan(ws, spike.twin(ws), args.plan_id)
     print(
         f"Applied {result['applied']} operations from {result['plan_id']}: production {result['previous']} -> {result['head']}"
     )
@@ -74,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.fn(Workspace.from_env(), args)
-    except (dryrun.DryRunError, approval.ApprovalError, apply.ApplyError, RunLogError) as e:
+    except (dryrun.DryRunError, approval.ApprovalError, apply.ApplyError, RunLogError, KernelError, TwinToolError) as e:
         print(f"staging: {e}", file=sys.stderr)
         return 2
 

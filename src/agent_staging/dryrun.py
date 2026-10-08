@@ -2,28 +2,28 @@
 # Copyright 2026 Revtiraman Tripathi
 """Dry-run: run an agent on a branch of production, turn what it did into a plan.
 
-The plan is built from two Seahaven logs of the branch instance:
-  * the call log: one record per call, with tool, arguments and error;
-  * the change log: one record per changed row, with `i`, the ordinal of the call that
-    made it, and the row before and after.
+The plan is built from two logs of the branch (agent_staging.kernel):
+  * calls: one record per call, with tool, arguments and error;
+  * changes: one record per changed row, with `i`, the ordinal of the call that made it,
+    and the row before and after.
 Joining them on `i` gives, for every write, the call that caused it, which is what lets
 the diff say "Refund $120.00 on charge-0001" instead of "a row changed in refunds".
 """
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-import seahaven
-
+from agent_staging.harness import Run
+from agent_staging.kernel import Branch, Change, StateMeta, TwinKernel, money
 from agent_staging.runlog import RunLog, sha256
 from agent_staging.session import Session
-from agent_staging.twins import refund_path
 from agent_staging.workspace import Workspace
 
-PLAN_FORMAT = "agent-staging.plan/1"
+PLAN_FORMAT = "agent-staging.plan/2"  # /2: kernel interface, per-currency amounts, assigned columns
 
 Agent = Callable[[Session], None]
 
@@ -55,39 +55,30 @@ class Plan:
         return plan
 
 
-def _change_dict(record: seahaven.LogRecord) -> dict[str, Any]:
-    return {
-        "table": record.table,
-        "op": record.op,
-        "key": dict(record.key),
-        "before": None if record.before is None else dict(record.before),
-        "after": None if record.after is None else dict(record.after),
-    }
-
-
-def build_plan(inst: seahaven.Instance, *, base: seahaven.Fixture, run_id: str) -> Plan:
-    calls = inst.call_log()
-    changes_by_call: dict[int | None, list[dict[str, Any]]] = {}
-    for record in inst.change_log():
-        changes_by_call.setdefault(record.i, []).append(_change_dict(record))
+def build_plan(twin: TwinKernel, branch: Branch, *, base: StateMeta, run_id: str) -> Plan:
+    by_call: dict[int | None, list[Change]] = defaultdict(list)
+    for change in branch.changes():
+        by_call[change.i].append(change)
 
     operations: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     blocked: list[dict[str, Any]] = []
-    for i, call in enumerate(calls):
-        changes = changes_by_call.pop(i, [])
-        mutating = call.tool in refund_path.MUTATING_TOOLS
+    for call in branch.calls():
+        changes = by_call.pop(call.i, [])
+        mutating = twin.is_mutating(call.tool)
         if call.error is not None:
             if mutating:
-                text, cents = refund_path.describe(call.tool, dict(call.arguments), [], inst.db)
+                d = twin.describe(branch, call.tool, call.arguments, [])
                 skipped.append(
                     {
-                        "i": i,
+                        "i": call.i,
                         "tool": call.tool,
-                        "arguments": dict(call.arguments),
-                        "describe": text,
-                        "amount": cents,
-                        "reason": call.error,
+                        "arguments": call.arguments,
+                        "describe": d.text,
+                        "amount": d.amount,
+                        "currency": d.currency,
+                        "reason": call.error["message"],
+                        "code": call.error["code"],
                     }
                 )
             continue
@@ -96,35 +87,44 @@ def build_plan(inst: seahaven.Instance, *, base: seahaven.Fixture, run_id: str) 
         if not mutating:
             blocked.append(
                 {
-                    "i": i,
+                    "i": call.i,
                     "tool": call.tool,
                     "reason": "tool wrote rows but is not declared as mutating",
-                    "changes": changes,
+                    "changes": [c.to_dict() for c in changes],
                 }
             )
             continue
-        text, cents = refund_path.describe(call.tool, dict(call.arguments), changes, inst.db)
+        d = twin.describe(branch, call.tool, call.arguments, changes)
         operations.append(
             {
-                "i": i,
+                "i": call.i,
                 "tool": call.tool,
-                "arguments": dict(call.arguments),
-                "describe": text,
-                "amount": cents,
-                "irreversible": call.tool in refund_path.IRREVERSIBLE_TOOLS,
-                "destructive": any(c["op"] == "delete" for c in changes),
-                "changes": changes,
+                "arguments": call.arguments,
+                "describe": d.text,
+                "amount": d.amount,
+                "currency": d.currency,
+                "irreversible": twin.is_irreversible(call.tool),
+                "destructive": any(c.op == "delete" for c in changes),
+                "changes": [c.to_dict() for c in changes],
             }
         )
-    for i, changes in changes_by_call.items():  # writes with no call in flight, e.g. inst.bulk()
-        blocked.append({"i": i, "tool": None, "reason": "rows changed outside any call", "changes": changes})
+    for i, changes in by_call.items():  # writes with no call in flight, e.g. inside bulk()
+        blocked.append(
+            {"i": i, "tool": None, "reason": "rows changed outside any call", "changes": [c.to_dict() for c in changes]}
+        )
 
-    meta = base.meta
+    tables = sorted({c["table"] for op in operations for c in op["changes"]})
+    amounts: dict[str, int] = defaultdict(int)
+    for op in operations:
+        amounts[op["currency"]] += op["amount"]
     body = {
         "format": PLAN_FORMAT,
         "run_id": run_id,
-        "world": {"name": meta.world, "version": meta.world_version, "schema_hash": meta.schema_hash},
-        "base": {"fixture": meta.id, "file_sha256": meta.file_sha256},
+        "world": {"name": base.world, "version": base.world_version, "schema_hash": base.schema_hash},
+        "base": {"state": base.id, "file_sha256": base.file_sha256, "now": base.now.isoformat()},
+        # Which columns of these tables the system fills in. Values there are only valid on the
+        # branch that made them: milestone 6 maps them instead of comparing (spike-notes).
+        "assigned": {t: dict(twin.assigned_columns(t)) for t in tables},
         "operations": operations,
         "skipped": skipped,
         "blocked": blocked,
@@ -135,42 +135,41 @@ def build_plan(inst: seahaven.Instance, *, base: seahaven.Fixture, run_id: str) 
             "blocked": len(blocked),
             "destructive": sum(op["destructive"] for op in operations),
             "irreversible": sum(op["irreversible"] for op in operations),
-            "amount": sum(op["amount"] for op in operations),
+            "amounts": dict(sorted(amounts.items())),
         },
     }
     return Plan(body)
 
 
-def find_fixture(world: seahaven.World, fixture_id: str) -> seahaven.Fixture:
-    for fixture in world.fixtures():
-        if fixture.meta.id == fixture_id:
-            return fixture
-    raise DryRunError(f"fixture {fixture_id} not found")
-
-
-def dry_run(ws: Workspace, agent: Agent, *, agent_name: str) -> tuple[Plan, str]:
+def dry_run(ws: Workspace, twin: TwinKernel, agent: Agent, *, agent_name: str) -> tuple[Plan, str]:
     """Branch production, run the agent there, write the plan. Production is not touched."""
     head = ws.prod_head()
     if head is None:
         raise DryRunError("no production state yet: run `staging spike seed` first")
-    world = refund_path.make_world(ws.fixtures)
-    base = find_fixture(world, head)
+    base = twin.state(head)
     run_id = ws.new_run_id()
-    log = RunLog.create(ws.run_log_path(run_id), {"kind": "dry-run", "agent": agent_name, "base": head})
-    with world.instance(head) as branch:
-        agent(Session(branch, log))
-        plan = build_plan(branch, base=base, run_id=run_id)
-        for change in branch.change_log():
-            log.append("change", _change_dict(change) | {"i": change.i})
+    log = RunLog.create(
+        ws.run_log_path(run_id), {"kind": "dry-run", "agent": agent_name, "twin": twin.name, "base": head}
+    )
+    with twin.open(head) as branch:
+        run = Run.start(branch, log)
+        agent(run.session)
+        plan = build_plan(twin, branch, base=base, run_id=run_id)
+        for change in branch.changes():
+            log.append("change", change.to_dict() | {"i": change.i})
     ws.write_json(ws.plan_path(plan.id), plan.to_file())
     log.append("plan.created", {"plan_id": plan.id, "hash": plan.hash, "summary": plan.body["summary"]})
     return plan, run_id
 
 
+def _amounts(amounts: dict[str, int]) -> str:
+    return " + ".join(money(cents, cur) for cur, cents in amounts.items()) or money(0)
+
+
 def render(plan: Plan) -> str:
     b = plan.body
     s = b["summary"]
-    lines = [f"PLAN {plan.id}   base {b['base']['fixture']}   run {b['run_id']}", ""]
+    lines = [f"PLAN {plan.id}   base {b['base']['state']}   run {b['run_id']}", ""]
     for op in b["operations"]:
         flags = "".join(
             [" [DESTRUCTIVE]" if op["destructive"] else "", " [IRREVERSIBLE]" if op["irreversible"] else ""]
@@ -192,7 +191,7 @@ def render(plan: Plan) -> str:
     lines += [
         "",
         (
-            f"Summary: {s['proposed']} proposed · {s['to_apply']} to apply ({refund_path._money(s['amount'])}) · "
+            f"Summary: {s['proposed']} proposed · {s['to_apply']} to apply ({_amounts(s['amounts'])}) · "
             f"{s['skipped']} skipped · {s['destructive']} destructive · {s['irreversible']} irreversible · "
             f"{s['blocked']} blocked"
         ),
