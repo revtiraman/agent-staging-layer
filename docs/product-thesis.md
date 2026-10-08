@@ -79,6 +79,16 @@ One agent, one twin, one failure ordinary tests miss:
 Demo: 2,000 orders, 40 s webhook delay, duplicate customer request, duplicate refund caught,
 replayed, then a dry-run of the corrected batch approved and applied.
 
+### What approval protects against, and what it doesn't yet
+
+In milestones 1–5, approval defends against a buggy agent (one that proposes more than intended). It does not yet defend against a hostile agent with shell access; that requires sandboxing the agent and signing approvals, which land in milestone 6. Do not deploy this against an agent you don't trust to run your own code.
+
+The milestone 1 spike found why: an agent running as the same OS user can fake the terminal the
+human types into and can write the approvals directory directly. The fix (agent in its own
+sandbox or OS user, approvals signed with a key the agent can't read) is milestone 6. Until then,
+every safety claim in this repository means "safe against an agent that makes mistakes", not
+"safe against an agent that has been compromised".
+
 ## 9. What we will not build (MVP)
 
 - Shopify and Zendesk twins (designed for, not built).

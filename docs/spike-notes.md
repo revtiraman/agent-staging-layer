@@ -4,6 +4,15 @@ Started and finished 2026-10-08 (day 1 of the 3-day timebox). Twin: `refund_path
 vendor vocabulary). Code: `src/agent_staging/{dryrun,approval,apply,runlog,session,spike}.py`.
 Tests: `tests/test_spike.py`, 10 passing.
 
+## What approval protects against today
+
+**In milestones 1–5, approval defends against a buggy agent (one that proposes more than intended). It does not yet defend against a hostile agent with shell access; that requires sandboxing the agent and signing approvals, which land in milestone 6. Do not deploy this against an agent you don't trust to run your own code.**
+
+Why: any process running as the same OS user can open a pseudo-terminal and type the confirmation
+(our own test does exactly that), and it can write `.staging/approvals/` directly. The typed
+confirmation stops an agent that *proposes the wrong thing*; it does not stop an agent that
+*attacks the approval step*. See open issue 2.
+
 ## Success criterion: met
 
 > An agent runs, proposes three refunds, the diff shows 2 valid + 1 skipped, a human types a
@@ -95,9 +104,10 @@ customer elsewhere doesn't block the apply (tested).
 2. **The terminal is not yet a security boundary.** Any process running as the same OS user can
    allocate a pseudo-terminal (our own test does), and the `approvals/` directory is writable by
    that user, so an agent with shell and filesystem access to `.staging/` could forge approval.
-   Gaps 1 and 3 are closed in the *interface*, not yet against a hostile agent on the same account.
-   Needed: run the agent in a separate sandbox or OS user with no access to `.staging/`, and sign
-   approvals with a key the agent can't read (milestone 6 and threat model).
+   Gaps 1 and 3 are closed in the *interface*, not against a hostile agent on the same account: so
+   today approval defends against a buggy agent only. Needed: run the agent in a separate sandbox
+   or OS user with no access to `.staging/`, and sign approvals with a key the agent can't read
+   (milestone 6 and threat model).
 3. **World specifics are hard-wired.** `dryrun.py` and `apply.py` import `refund_path` directly
    (mutating tools, `describe`, volatile columns). These become methods on the world adapter behind
    the `TwinKernel` protocol (milestone 2).
@@ -106,6 +116,15 @@ customer elsewhere doesn't block the apply (tested).
    idempotency keys and confirmation (Volter's push-ledger idea).
 5. **Test harness noise.** Python 3.14 warns that `forkpty()` in a multi-threaded process may
    deadlock. The child calls `exec` immediately, so the warning is filtered in the tests.
+
+## Planted for milestone 6 (not built)
+
+- **Id mapping:** plans will name created objects by what they are ("the refund for
+  charge-0001"), and apply will resolve each name to whatever id the system returns, so the kernel
+  interface must not assume ids are stable across bases.
+- **Signed approvals:** `staging approve` will sign `{plan_id, plan_hash, decision}` with a key
+  the agent can't read (macOS Keychain or a file owned by another OS user), so the approval
+  record format must carry a `signature` field from milestone 2 on, even while it is empty.
 
 ## Throwaway vs. keep
 

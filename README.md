@@ -4,7 +4,10 @@ Staging, simulation and dry-run infrastructure for AI agents that write to SaaS 
 Stripe first.
 
 **Status: milestone 1 spike done** (dry-run → diff → approve → apply on a test world).
-Not a product yet: no Stripe twin, no faults, no replay. Read, in order:
+Not a product yet: no Stripe twin, no faults, no replay.
+
+> **Security status:** In milestones 1–5, approval defends against a buggy agent (one that proposes more than intended). It does not yet defend against a hostile agent with shell access; that requires sandboxing the agent and signing approvals, which land in milestone 6. Do not deploy this against an agent you don't trust to run your own code.
+ Read, in order:
 
 1. [docs/product-thesis.md](docs/product-thesis.md)
 2. [docs/problem-map.md](docs/problem-map.md)

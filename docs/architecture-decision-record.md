@@ -149,6 +149,6 @@ correlation id, so tools like agentevals can read runs.
 | 2 | Seahaven is young, Python 3.14-only | `TwinKernel` protocol; pin version; uv manages Python |
 | 3 | Seahaven's clock can't be advanced on demand (verified: modes are `fixed`, `tick` (+1 s per call), `running`, `wall`; no advance API) | The harness owns a virtual clock for faults and webhook scheduling; the twin runs in `tick` mode, so object timestamps stay deterministic. Spike in Phase 5 to confirm timestamps stay plausible |
 | 4 | Fidelity claims need real sandbox recordings | Needs a Stripe test-mode key from you (Phase 18) |
-| 5 | Volter ships plan → review → push; if they add seeded faults they take the wedge | Ship the fault/replay/CI loop first (milestones 3–5, 7); close their approval gaps (agent can self-approve, hash covers ids not amounts); don't race on vendor breadth |
+| 5 | Volter ships plan → review → push; if they add seeded faults they take the wedge | Ship the fault/replay/CI loop first (milestones 3–5, 7); close their approval gaps (hash covers ids not amounts: closed in milestone 1; agent can self-approve: closed against a buggy agent in milestone 1, against a hostile one only in milestone 6); don't race on vendor breadth |
 | 6 | LLM nondeterminism | Two-level replay (D), documented |
 | 7 | Solo bandwidth | Strict MVP; Shopify/Zendesk stay interfaces |
