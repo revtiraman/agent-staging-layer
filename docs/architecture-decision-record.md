@@ -53,14 +53,39 @@ separate diff engine.
 - **Licence:** MIT. **Ops complexity:** a pip dependency. **Scale:** hundreds of instances per
   process (its claim, UNVERIFIED; we benchmark in Phase 19). **MVP fit:** high.
 
-## A2. Stripe twin: our own Seahaven world
+## A2. Stripe twin: deferred until Kiln answers (revised after Gate 1 review)
 
-- **Why:** stripe_world would be ideal (1,104 tests, sandbox cassettes) but has **no licence**.
-  We implement only the MVP subset (Customers, PaymentIntents, Charges, Refunds, Events,
-  WebhookEndpoints) from `stripe/openapi` (MIT), with refund rules: no refund on a missing
-  payment, an already fully refunded charge, or an amount above the remainder.
-- **Alternative:** if Kiln adds MIT/Apache to stripe_world, depend on it and add only webhooks
-  and faults (decision for you at Gate 1).
+The twin is a commodity; the weeks go to the layer above it. So the Stripe twin is **not**
+built first.
+
+- **Ask first:** a licence request to Kiln for stripe_world (`docs/outreach/kiln-stripe-world-licence.md`).
+- **If MIT/Apache:** depend on stripe_world unmodified; our only Stripe work is webhook delivery
+  (offered upstream) and fault hooks. Estimated days, not weeks.
+- **If no, or no answer in 7 days:** write the MVP subset as our own Seahaven world from
+  `stripe/openapi` (MIT): Customers, PaymentIntents, Charges, Refunds, Events, WebhookEndpoints,
+  roughly 1,500 lines. Refund rules: no refund on a missing payment, an already fully refunded charge, or
+  an amount above the remainder.
+- **Meanwhile:** the layer is built against the `TwinKernel` protocol and exercised with
+  `refund_path`, a deliberately tiny Seahaven test world (customer, charge, refund, event; a few
+  hundred lines). It is test scaffolding, labelled as such, never shipped as "the Stripe twin".
+  Whichever Stripe twin wins plugs in behind the same protocol, and the layer's tests rerun
+  against it unchanged.
+- **Not:** Volter as a dependency (competitor; kernel source not public). Its fork/plan/lease
+  design is studied in `docs/research/volter-plan-fork-lease.md`.
+
+## Implementation order (revised)
+
+| # | Milestone | Depends on Kiln? |
+| --- | --- | --- |
+| 1 | 3-day spike: dry-run → diff → approve UX on `refund_path` (Seahaven change log) | No |
+| 2 | `TwinKernel` protocol + Seahaven adapter + harness-owned virtual clock | No |
+| 3 | Seeded fault middleware + webhook scheduler (delay, duplicate, reorder, 429, timeout) | No |
+| 4 | Scenario + hard-invariant engine | No |
+| 5 | Hash-chained run log + `staging replay` (environment replay) | No |
+| 6 | Dry-run: plan with full-content hash, human-only approval, per-object stale check, apply | No |
+| 7 | CLI + local GitHub Actions job | No |
+| 8 | Stripe twin: stripe_world adapter **or** own subset | **Yes** |
+| 9 | Replay UI, threat model, conformance against a Stripe sandbox, benchmarks, docs, demo | Partly (sandbox key) |
 
 ## B. Agent execution harness
 
@@ -119,10 +144,10 @@ correlation id, so tools like agentevals can read runs.
 
 | # | Risk | Mitigation |
 | --- | --- | --- |
-| 1 | stripe_world unlicensed → we write the Stripe subset ourselves (about 1–2 weeks) | Ask Kiln for a licence; keep the subset small |
+| 1 | stripe_world unlicensed | Ask Kiln first; build the layer meanwhile; own subset only as the 7-day fallback |
 | 2 | Seahaven is young, Python 3.14-only | `TwinKernel` protocol; pin version; uv manages Python |
 | 3 | Seahaven's clock can't be advanced on demand (verified: modes are `fixed`, `tick` (+1 s per call), `running`, `wall`; no advance API) | The harness owns a virtual clock for faults and webhook scheduling; the twin runs in `tick` mode, so object timestamps stay deterministic. Spike in Phase 5 to confirm timestamps stay plausible |
 | 4 | Fidelity claims need real sandbox recordings | Needs a Stripe test-mode key from you (Phase 18) |
-| 5 | Volter ships plan → review → push already | Our wedge: seeded faults + webhook timing + CI replay loop; don't race them on breadth |
+| 5 | Volter ships plan → review → push; if they add seeded faults they take the wedge | Ship the fault/replay/CI loop first (milestones 3–5, 7); close their approval gaps (agent can self-approve, hash covers ids not amounts); don't race on vendor breadth |
 | 6 | LLM nondeterminism | Two-level replay (D), documented |
 | 7 | Solo bandwidth | Strict MVP; Shopify/Zendesk stay interfaces |
