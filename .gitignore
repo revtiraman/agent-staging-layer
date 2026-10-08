@@ -1,0 +1,8 @@
+research/*
+!research/README.md
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.staging/
