@@ -4,8 +4,9 @@ Date 2026-10-08. Evidence: `docs/research/`. Status of every decision: **Propose
 
 ## Summary
 
-**Compose on Seahaven (MIT, Python) as the twin kernel; write our own Stripe world on it from the
-MIT Stripe OpenAPI spec; build the differentiating layer ourselves:** seeded faults, webhook
+**Compose on Seahaven (MIT, Python) as the twin kernel; build the differentiating layer first;
+choose the Stripe twin last (stripe_world if Kiln licenses it, our own subset otherwise). The
+layer we build ourselves:** seeded faults, webhook
 scheduler on a virtual clock, scenario + invariant engine, hash-chained run log and replay,
 change-log-based dry-run with hash-bound approval, CLI and a GitHub Actions job. One Python
 process, SQLite files, no services.
