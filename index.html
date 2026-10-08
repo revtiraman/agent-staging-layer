@@ -526,9 +526,9 @@ section{scroll-margin-top:76px}
 .cta h2{font-family:var(--f-mono); font-weight:400; font-size:clamp(2.4rem, .8rem + 7.2vw, 7.6rem); line-height:1; letter-spacing:-.06em; white-space:nowrap; color:var(--ink)}
 .cta h2 .tw{color:var(--twin)}
 .cta-water{height:clamp(120px, 16vw, 230px)}
-.cta-grid{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.1fr); gap:20px; align-items:start}
+.cta-grid{display:grid; grid-template-columns:minmax(0,1fr); gap:20px; align-items:start}
 @media (max-width: 980px){ .cta-grid{grid-template-columns:minmax(0,1fr)} }
-.offer{display:grid; gap:12px}
+.offer{display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
 .offer > div{padding:22px}
 .offer h3{margin-bottom:12px}
 .offer ul{display:grid; gap:10px}
@@ -1233,7 +1233,7 @@ main, .site-foot{position:relative; z-index:1}
     </div>
     <div class="bento">
       <article class="tile glass spot t-a rise">
-        <div class="tile-top"><h3 class="h3">Stateful twins</h3><span class="chip chip--now">Building now</span></div>
+        <div class="tile-top"><h3 class="h3">Stateful twins</h3><span class="chip chip--now">Planned</span></div>
         <p>A refund changes the charge, queues a webhook and shows up when the agent reads it back. Twins remember, across systems.</p>
         <div class="viz">
           <div class="ledger" id="lg">
@@ -1244,7 +1244,7 @@ main, .site-foot{position:relative; z-index:1}
         </div>
       </article>
       <article class="tile glass spot t-b rise">
-        <div class="tile-top"><h3 class="h3">Fault injection</h3><span class="chip chip--now">Building now</span></div>
+        <div class="tile-top"><h3 class="h3">Fault injection</h3><span class="chip chip--now">Planned</span></div>
         <p>Turn production's bad days into switches.</p>
         <div class="viz"><div class="scope">
           <svg viewBox="0 0 300 110" preserveAspectRatio="none" aria-hidden="true"><path id="scope-p" d="" fill="none" stroke="#F2B84E" stroke-width="1.5"/><path d="M0 55H300" stroke="rgba(178,198,238,.12)" stroke-dasharray="3 4"/></svg>
@@ -1252,7 +1252,7 @@ main, .site-foot{position:relative; z-index:1}
         </div></div>
       </article>
       <article class="tile glass spot t-c rise">
-        <div class="tile-top"><h3 class="h3">Deterministic replay</h3><span class="chip chip--now">Building now</span></div>
+        <div class="tile-top"><h3 class="h3">Deterministic replay</h3><span class="chip chip--now">Planned</span></div>
         <p>Same seed, same trace, every time.</p>
         <div class="viz"><div class="replay">
           <div class="rp-row"><span>run 1</span><div class="rp-bar"><i style="width:18%"></i><i style="width:9%" class="f"></i><i style="width:22%"></i><i style="width:7%" class="b"></i><i style="width:30%"></i><span class="rp-head"></span></div><svg class="rp-ok" width="14" height="14"><use href="#i-check"/></svg></div>
@@ -1262,7 +1262,7 @@ main, .site-foot{position:relative; z-index:1}
         </div></div>
       </article>
       <article class="tile glass spot t-d rise">
-        <div class="tile-top"><h3 class="h3">Invariants as code</h3><span class="chip chip--now">Building now</span></div>
+        <div class="tile-top"><h3 class="h3">Invariants as code</h3><span class="chip chip--now">Planned</span></div>
         <p>Rules that must hold after every step.</p>
         <div class="viz"><pre class="typer" id="typer" aria-label="Example invariant: one refund per ticket"></pre></div>
       </article>
@@ -1282,7 +1282,7 @@ main, .site-foot{position:relative; z-index:1}
         </div>
       </article>
       <article class="tile glass spot t-f rise">
-        <div class="tile-top"><h3 class="h3">A gate in CI</h3><span class="chip chip--now">Building now</span></div>
+        <div class="tile-top"><h3 class="h3">A gate in CI</h3><span class="chip chip--now">Planned</span></div>
         <div class="viz"><div class="ci">
           <div style="display:grid; gap:14px">
             <p>Every prompt, tool or model change runs the scenarios before it merges. A broken invariant blocks the merge, with the seed attached so anyone can replay it.</p>
@@ -1371,8 +1371,9 @@ main, .site-foot{position:relative; z-index:1}
       </div>
       <p class="lead">Nothing here is generally available. Design partners decide the order.</p>
     </div>
+    <p class="dim" style="margin:-8px 0 28px">Status, October 2026: an early prototype. Dry-run, approval and seeded fault injection run against a small test world. There is no Stripe twin yet, and nothing you can use today.</p>
     <div class="track">
-      <div class="stage now"><span class="pin"><i></i></span><div class="stage-h"><h3 class="h3">Building now</h3><span class="here">You are here</span></div>
+      <div class="stage now"><span class="pin"><i></i></span><div class="stage-h"><h3 class="h3">Planned</h3><span class="here">You are here</span></div>
         <ul><li>Twins of Stripe, Shopify and Zendesk</li><li>Fault injection and replay by seed</li><li>Invariant checks that run in CI</li></ul></div>
       <div class="stage"><span class="pin"><i></i></span><div class="stage-h"><h3 class="h3">Next</h3><span class="chip chip--design">In design</span></div>
         <ul><li>Production dry-run with approval</li><li>Twins of Salesforce, HubSpot and Jira</li><li>Thresholds and approver rules</li></ul></div>
@@ -1412,34 +1413,12 @@ main, .site-foot{position:relative; z-index:1}
   </div>
   <div class="cta-water" id="cta-water"></div>
   <div class="wrap">
-    <p class="lead" style="margin-bottom:36px">We're working with a few teams whose agents write to money, orders or customer records. If that's you, we'd like to build the twins around your workflows.</p>
     <div class="cta-grid">
       <div class="offer">
         <div class="glass"><h3 class="h3">Who it's for</h3><ul><li><svg class="g-a"><use href="#i-plus"/></svg>Teams shipping agents that refund, change orders, bill customers or update CRM records</li><li><svg class="g-a"><use href="#i-plus"/></svg>Any agent framework, any model</li></ul></div>
         <div class="glass"><h3 class="h3">What you get</h3><ul><li><svg class="g-a"><use href="#i-plus"/></svg>Twins of the systems your agent touches, shaped around your workflows</li><li><svg class="g-a"><use href="#i-plus"/></svg>A failure report on your own agent during the pilot</li><li><svg class="g-a"><use href="#i-plus"/></svg>Direct access to the people building it</li></ul></div>
         <div class="glass"><h3 class="h3">What we ask</h3><ul><li><svg class="g-c"><use href="#i-tilde"/></svg>A weekly 30-minute review with one engineer</li><li><svg class="g-c"><use href="#i-tilde"/></svg>Candid feedback, including what not to build</li></ul></div>
       </div>
-      <form class="form glass" id="partner-form" novalidate>
-        <div class="form-grid">
-          <div class="f"><label for="p-name">Name</label><input class="inp" id="p-name" name="name" autocomplete="name"><span class="err" id="e-name"></span></div>
-          <div class="f"><label for="p-email">Work email</label><input class="inp" id="p-email" name="email" type="email" autocomplete="email"><span class="err" id="e-email"></span></div>
-          <div class="f full"><label for="p-company">Company</label><input class="inp" id="p-company" name="company" autocomplete="organization"><span class="err" id="e-company"></span></div>
-          <fieldset class="f full fs"><legend>What does your agent write to?</legend>
-            <div class="checks-row">
-              <label class="ck"><input type="checkbox" id="w-pay" name="writes" value="payments"><span class="bx"></span>Payments</label>
-              <label class="ck"><input type="checkbox" id="w-ord" name="writes" value="orders"><span class="bx"></span>Orders</label>
-              <label class="ck"><input type="checkbox" id="w-sup" name="writes" value="support"><span class="bx"></span>Support tickets</label>
-              <label class="ck"><input type="checkbox" id="w-crm" name="writes" value="crm"><span class="bx"></span>CRM</label>
-              <label class="ck"><input type="checkbox" id="w-oth" name="writes" value="other"><span class="bx"></span>Something else</label>
-            </div>
-          </fieldset>
-          <div class="f full"><label for="p-note">What broke last time? <span class="hint">Optional</span></label><textarea class="inp" id="p-note" name="note" rows="3"></textarea></div>
-        </div>
-        <div class="form-foot">
-          <button class="btn btn--primary" type="submit">Request a pilot <svg><use href="#i-arrow"/></svg></button>
-          <p class="form-msg" id="form-msg" aria-live="polite"></p>
-        </div>
-      </form>
     </div>
   </div>
 </section>
@@ -3742,29 +3721,6 @@ void main(){
       const i = tabs.indexOf(t), n = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
       n.focus(); selectTab(n);
     });
-  });
-
-  /* ================================================================
-     Partner form (UI only: no inbox is connected)
-     ================================================================ */
-  const form = $("#partner-form"), msg = $("#form-msg");
-  function fieldErr(id, text) {
-    const el = $("#" + id), e = $("#e-" + id.split("-")[1]);
-    el.setAttribute("aria-invalid", text ? "true" : "false"); e.textContent = text;
-    if (text) el.setAttribute("aria-describedby", e.id); else el.removeAttribute("aria-describedby");
-    return !text;
-  }
-  form.addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    const name = $("#p-name").value.trim(), email = $("#p-email").value.trim(), company = $("#p-company").value.trim();
-    const ok = [
-      fieldErr("p-name", name ? "" : "Add your name."),
-      fieldErr("p-email", /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? "" : "Enter a work email, like you@company.com."),
-      fieldErr("p-company", company ? "" : "Add your company.")
-    ].every(Boolean);
-    if (!ok) { msg.className = "form-msg"; msg.textContent = ""; const first = form.querySelector('[aria-invalid="true"]'); if (first) first.focus(); return; }
-    msg.className = "form-msg warn";
-    msg.textContent = "This preview isn't connected to an inbox yet, so nothing was sent.";
   });
 
   /* ================================================================
