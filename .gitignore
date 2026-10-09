@@ -6,3 +6,6 @@ __pycache__/
 *.pyc
 .DS_Store
 .staging/
+
+# Private: holds order numbers, eligibility and application notes. Never publish.
+docs/operating-file.md
