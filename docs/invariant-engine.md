@@ -150,3 +150,16 @@ separate, explicit action, if it is ever built.
   `no_retry_after_lost_response_timeout` on the behaviour (a blind retry after a lost response).
   Two $25 refunds that were both asked for leave the same kind of rows and fail neither rule.
   Only the fault log tells them apart (`test_it_needs_the_fault_record_not_just_state`).
+- **Re-execution needs to know where a branch came from.** Branches now carry an `origin`
+  (state, file hash, twin seed, start time), and every run logs it in `base.state`, checked or not.
+- **Fault records were already enough to re-execute.** Every decision the harness needs (schedule,
+  duplicate, batch order, request fault) is looked up by its key. Re-execution of a run with every
+  fault kind and a webhook handler that makes its own requests reproduces record for record
+  (`test_a_run_with_every_fault_kind_and_handler_calls_re_executes_identically`).
+- **The import guard is tested against itself.** Adding `import agent_staging.advisory` to
+  `apply.py` makes `test_nothing_that_gates_imports_the_soft_module[agent_staging.apply]` fail
+  (checked by hand during milestone 5, then reverted). The scan follows apply's real import chain
+  (apply → approval → dryrun → harness → …), which another test asserts.
+- **The shipped judge is a keyword heuristic, not an LLM** (`KeywordJudge`, model `heuristic/1`).
+  It makes the layer testable end to end. A model judge plugs in behind `Judge` and needs an API
+  key, which this repository doesn't have.

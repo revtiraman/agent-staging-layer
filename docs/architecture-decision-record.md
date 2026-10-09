@@ -90,7 +90,7 @@ built first.
 | 2 | `TwinKernel` protocol + Seahaven adapter + harness-owned virtual clock. **Done 2026-10-08** (`docs/kernel-interface.md`) | No |
 | 3 | Seeded fault middleware + webhook scheduler (delay, duplicate, reorder, 429, timeout). **Done 2026-10-09** (spike-notes, decisions 6–8) | No |
 | 4 | Scenario + hard-invariant engine. **Done 2026-10-09** (`docs/invariant-engine.md`) | No |
-| 5 | Hash-chained run log + `staging replay` (environment replay) | No |
+| 5 | Hash-chained run log + `staging replay` (environment replay). **Done 2026-10-09**: log-only and re-execution replay, advisory layer (`docs/invariant-engine.md`) | No |
 | 6 | Dry-run: plan with full-content hash, human-only approval, per-object stale check, apply | No |
 | 7 | CLI + local GitHub Actions job | No |
 | 8 | Stripe twin: stripe_world adapter **or** own subset | **Yes** |

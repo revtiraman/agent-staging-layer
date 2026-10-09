@@ -194,6 +194,8 @@ class Engine:
         failures = []
         for inv in self.invariants:
             found = inv.check(state, tuple(self.changes), self.timeline, self.intent)
+            if not all(isinstance(v, Violation) for v in found):  # a guard on the input, not a dispatch
+                raise TypeError(f"invariant {inv.name} returned something other than Violation")
             for v in sorted(found, key=lambda v: v.subject):
                 if (inv.name, v.subject) in self._reported:
                     continue

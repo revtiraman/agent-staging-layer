@@ -6,6 +6,9 @@ the original record by record (wall-clock times and hashes aside)."""
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -107,7 +110,10 @@ def test_a_run_with_every_fault_kind_and_handler_calls_re_executes_identically(w
                 run.advance(1.5)
         run.advance(10)
     kinds = {r["data"]["kind"] for r in run.log.records() if r["type"] == "fault"}
-    assert {"webhook.schedule", "webhook.duplicate"} <= kinds and kinds & {"request.rate_limited", "request.lost_response"}
+    assert {"webhook.schedule", "webhook.duplicate"} <= kinds and kinds & {
+        "request.rate_limited",
+        "request.lost_response",
+    }
     handler_calls = [r for r in run.log.records() if r["type"] == "call" and r["data"]["tool"] == "get_charge"]
     assert handler_calls  # the handler did make requests
 
@@ -115,7 +121,9 @@ def test_a_run_with_every_fault_kind_and_handler_calls_re_executes_identically(w
     assert result["verdict"] == "reproduced", result["detail"]
 
 
-def test_a_twin_that_behaves_differently_is_caught_at_the_record(ws: Workspace, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_twin_that_behaves_differently_is_caught_at_the_record(
+    ws: Workspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     run_id = demo_run(ws)
     original = SeahavenBranch.call
 
@@ -175,3 +183,16 @@ def test_a_tampered_log_is_refused(ws: Workspace) -> None:
     path.write_text(path.read_text().replace('"amount":5000', '"amount":9000', 1))
     with pytest.raises(Divergence, match="not intact"):
         execute(ws, spike.twin(ws), run_id, INVARIANTS)
+
+
+def test_the_cli_re_executes_a_run(ws: Workspace) -> None:
+    run_id = demo_run(ws)
+    proc = subprocess.run(
+        [sys.executable, "-m", "agent_staging.cli", "replay", "--execute", run_id],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "STAGING_HOME": str(ws.root)},
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout.strip().endswith("REPRODUCED")

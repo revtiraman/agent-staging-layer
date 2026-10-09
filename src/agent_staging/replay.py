@@ -97,6 +97,8 @@ def replay(ws: Workspace, twin: TwinKernel, run_id: str, invariants: Sequence[In
         "invariants": results,
         "not_evaluated": sorted(set(current) - set(active)),  # exist now, weren't active in the run
         "failures": got,
+        # recorded soft-invariant output, reported as is: replay never calls a judge
+        "advisory": [r["data"] for r in records if r["type"] == "advisory.note"],
     }
     out = ws.run_log_path(run_id).parent / "replays"
     out.mkdir(parents=True, exist_ok=True)

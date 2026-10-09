@@ -3,10 +3,11 @@
 Staging, simulation and dry-run infrastructure for AI agents that write to SaaS systems.
 Stripe first.
 
-**Status: milestone 4 done** (1: dry-run → diff → approve → apply on a test world; 2: twin
+**Status: milestone 5 done** (1: dry-run → diff → approve → apply on a test world; 2: twin
 kernel interface and a harness-owned clock; 3: seeded, logged faults; 4: hard invariants over
-state, changes, faults and intent, with failures as log records and `staging replay` that
-re-evaluates them from the log alone). Not a product yet: no Stripe twin, no re-execution replay.
+state, changes, faults and intent; 5: re-execution replay from recorded decisions, and an
+advisory soft-invariant layer that can't change an outcome). Not a product yet: no Stripe twin,
+no replay UI.
 
 > **Security status:** In milestones 1–5, approval defends against a buggy agent (one that proposes more than intended). It does not yet defend against a hostile agent with shell access; that requires sandboxing the agent and signing approvals, which land in milestone 6. Do not deploy this against an agent you don't trust to run your own code.
  Read, in order:
@@ -27,6 +28,8 @@ uv run staging spike seed
 uv run staging spike run            # prints the plan
 uv run staging approve <plan-id>    # type the confirmation at your terminal
 uv run staging apply <plan-id>
+uv run staging replay <run-id>             # re-evaluate invariants from the log
+uv run staging replay --execute <run-id>   # re-execute from the recorded decisions
 uv run pytest
 ```
 
