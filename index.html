@@ -133,6 +133,7 @@ button{font:inherit; color:inherit}
 .hero-water{flex:1; min-height:clamp(220px, 34vh, 360px); position:relative}
 .hero-low{display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:32px; align-items:end; padding-bottom:28px}
 .hero-low .lead{color:var(--ink-2)}
+.hero-status{margin-top:14px; max-width:58ch; font-size:.8rem; line-height:1.5; color:var(--ink-2); text-shadow:0 1px 18px rgba(3,5,9,.85)}
 .hero-low .lead strong{color:var(--ink); font-weight:600}
 .hero-ctas{display:flex; gap:12px; flex-wrap:wrap; justify-content:flex-end}
 .hud{position:relative; border-top:1px solid var(--line-2); background:linear-gradient(180deg, rgba(6,8,12,0), rgba(6,8,12,.6))}
@@ -173,6 +174,9 @@ button{font:inherit; color:inherit}
 section{scroll-margin-top:76px}
 .sec{position:relative; padding-block:clamp(88px, 11vw, 168px)}
 .sec-head{display:grid; gap:22px; max-width:900px; margin-bottom:clamp(44px, 6vw, 80px)}
+.founder-text{display:grid; gap:22px; max-width:68ch}
+.founder-text .lead a, #github .lead a{color:var(--ink); text-decoration:underline; text-underline-offset:4px}
+.sec--tight{padding-block:clamp(48px, 6vw, 88px)}
 .sec-head--split{max-width:none; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); align-items:end; gap:32px 64px}
 @media (max-width: 900px){ .sec-head--split{grid-template-columns:minmax(0,1fr)} }
 .horizon-rule{height:3px; position:relative; overflow:hidden; background:linear-gradient(90deg, transparent, var(--line) 15%, var(--line) 85%, transparent) 0 1px / 100% 1px no-repeat}
@@ -994,7 +998,10 @@ main, .site-foot{position:relative; z-index:1}
       <div class="notes" id="hero-notes" aria-hidden="true"></div>
     </div>
     <div class="wrap hero-low">
-      <p class="lead">Vektra is a staging layer for AI agents: every write runs against a stateful copy of the SaaS API first, so you review the exact diff and only approved changes reach production. Break it there. <strong>Ship only what holds.</strong></p>
+      <div class="hero-copy">
+        <p class="lead">Vektra is a staging layer for AI agents: every write runs against a stateful copy of the SaaS API first, so you review the exact diff and only approved changes reach production. Break it there. <strong>Ship only what holds.</strong></p>
+        <p class="hero-status">Early prototype. The kernel, invariant engine, and replay are built and tested. The first Stripe twin is planned.</p>
+      </div>
       <div class="hero-ctas">
         <a class="btn btn--primary" href="https://www.linkedin.com/in/revtiramantripathi" target="_blank" rel="noopener">Contact the founder <svg><use href="#i-arrow"/></svg></a>
         <a class="btn btn--ghost" href="#run">Watch it break <svg class="down"><use href="#i-down"/></svg></a>
@@ -1403,6 +1410,20 @@ main, .site-foot{position:relative; z-index:1}
   </div>
 </section>
 
+<!-- ======================= FOUNDER ======================= -->
+<section class="sec" id="founder" aria-labelledby="founder-title">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="h2" id="founder-title">Founder</h2>
+    </div>
+    <div class="founder-text">
+      <p class="lead">I'm Revtiraman. I work on infrastructure for AI agents — most recently the pipeline behind an enterprise agent-memory system: knowledge graph modeling, semantic deduplication, conflict detection, and turning raw agent learnings into validated, reusable skills.</p>
+      <p class="lead">Vektra is what I'm building next. Agents shouldn't experiment against production. Every write runs against a stateful copy of the SaaS API first — the agent rehearses, you review the exact diff, and only approved changes reach production.</p>
+      <p class="lead"><a href="https://github.com/revtiraman" target="_blank" rel="noopener">GitHub</a></p>
+    </div>
+  </div>
+</section>
+
 <!-- ======================= CTA ======================= -->
 <section class="cta" id="partner" aria-labelledby="cta-title">
   <div class="wrap">
@@ -1420,6 +1441,13 @@ main, .site-foot{position:relative; z-index:1}
         <div class="glass"><h3 class="h3">What we ask</h3><ul><li><svg class="g-c"><use href="#i-tilde"/></svg>A weekly 30-minute review with one engineer</li><li><svg class="g-c"><use href="#i-tilde"/></svg>Candid feedback, including what not to build</li></ul></div>
       </div>
     </div>
+  </div>
+</section>
+<!-- ======================= GITHUB ======================= -->
+<section class="sec sec--tight" id="github" aria-labelledby="github-title">
+  <div class="wrap">
+    <h2 class="h3" id="github-title">GitHub</h2>
+    <p class="lead">The prototype is open source: <a href="https://github.com/revtiraman/agent-staging-layer" target="_blank" rel="noopener">github.com/revtiraman/agent-staging-layer</a></p>
   </div>
 </section>
 </main>
